@@ -1,32 +1,25 @@
 const std = @import("std");
-const vm_mod = @import("vm.zig");
-const Compiler = @import("compiler.zig").Compiler;
+const vm_mod = @import("vm/root.zig");
+const Compiler = @import("compiler/root.zig").Compiler;
 
 pub fn main() !void {
   var gpa = std.heap.GeneralPurposeAllocator(.{}){};
   defer _ = gpa.deinit();
   const allocator = gpa.allocator();
 
-  const source_code =
-    \\say('Iniciando Benchmark...')
-    \\say(123456)
-    \\say('Fim.')
-    \\say(10 + 20)
-    \\say(10 + 20 + 30 + 40 + 50)
-  ;
+  const args = try std.process.argsAlloc(allocator);
+  defer std.process.argsFree(allocator, args);
 
-  std.debug.print("==================================\n", .{});
-  std.debug.print("SIMPLE SCRIPT ENGINE - BENCHMARK\n", .{});
-  std.debug.print("==================================\n", .{});
+  const filename = args[1];
 
-  var timer = try std.time.Timer.start();
+  const max_size = 1024 * 1024;
+  const source_code = try readFile(allocator, filename, max_size);
+  defer allocator.free(source_code);
 
   var compiler = Compiler.init(allocator);
   defer compiler.deinit();
 
   try compiler.compile(source_code);
-
-  const compile_time = timer.read();
 
   var vm = vm_mod.VM{
     .registers = undefined,
@@ -34,18 +27,11 @@ pub fn main() !void {
     .pc = 0,
   };
 
-  timer.reset();
   try vm.run(compiler.instructions.items);
+}
 
-  const run_time = timer.read();
-
-  std.debug.print("\n----------------------------------\n", .{});
-  std.debug.print("RELATORIO DE PERFORMANCE:\n", .{});
-
-  const compile_ms = @as(f64, @floatFromInt(compile_time)) / 1_000_000.0;
-  const run_ms = @as(f64, @floatFromInt(run_time)) / 1_000_000.0;
-
-  std.debug.print("Tempo de Compilacao: {d:.4} ms\n", .{ compile_ms });
-  std.debug.print("Tempo de Execucao:   {d:.4} ms\n", .{ run_ms });
-  std.debug.print("----------------------------------\n", .{});
+fn readFile(allocator: std.mem.Allocator, filename: []const u8, max_size: usize) ![]u8 {
+  const file = try std.fs.cwd().openFile(filename, .{});
+  defer file.close();
+  return file.readToEndAlloc(allocator, max_size);
 }
