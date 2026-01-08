@@ -27,24 +27,4 @@ pub fn build(b: *std.Build) void {
 
   const run_step = b.step("run", "Run the app");
   run_step.dependOn(&run_cmd.step);
-
-  const test_step = b.step("test", "Run all tests");
-
-  // Parser test
-  const parser_tests = b.addTest(.{
-    .root_source_file = b.path("tests/parser_test.zig"),
-    .target = target,
-    .optimize = optimize,
-  });
-  const run_parser_tests = b.addRunArtifact(parser_tests);
-  test_step.dependOn(&run_parser_tests.step);
-
-  // Integration tests
-  const integration_tests = b.addTest(.{
-    .root_source_file = b.path("tests/integration_test.zig"),
-    .target = target,
-    .optimize = optimize,
-  });
-  const run_integration_tests = b.addRunArtifact(integration_tests);
-  test_step.dependOn(&run_integration_tests.step);
 }

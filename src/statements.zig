@@ -5,10 +5,11 @@ const expressions_mod = @import("expressions.zig");
 const llvm_bindings = @import("llvm.zig");
 
 const Compiler = compiler_mod.Compiler;
+const DataType = compiler_mod.DataType;
 const Lexer = parser_mod.Lexer;
+const llvm = llvm_bindings.c;
 const Token = parser_mod.Token;
 const TokenType = parser_mod.TokenType;
-const llvm = llvm_bindings.c;
 
 // Compile entire source code
 pub fn compile(self: *Compiler, source: []const u8) !void {
@@ -17,80 +18,229 @@ pub fn compile(self: *Compiler, source: []const u8) !void {
   while (true) {
     const token = lexer.next();
     if (token.tag == .eof) break;
-    try self.compileStatement(self, &lexer, token);
+    try compileStatement(self, &lexer, token);
   }
 }
 
 // Compile a single statement
-pub fn compileStatement(self: *Compiler, lexer: *Lexer, token: Token) !void {
+pub fn compileStatement(self: *Compiler, lexer: *Lexer, token: Token) anyerror!void {
   switch (token.tag) {
     .kw_var => try compileDeclaration(self, lexer, false),
     .kw_const => try compileDeclaration(self, lexer, true),
     .kw_for => try compileForLoop(self, lexer),
-    .Identifier => {
-      // Check for built-in functions
-      if (std.mem.eql(u8, token.slice, "say")) {
-        try compileSay(self, lexer);
-      } else {
-        std.debug.print("Error: Unknown identifier '{s}'\n", .{token.slice});
-        return error.UnknownIdentifier;
-      }
+    .identifier => {
+      if (std.mem.eql(u8, token.slice, "say")) { try compileSay(self, lexer); }
+      else try compileAssignment(self, lexer, token);
     },
     .rbrace => {}, // Valid but no-op (closing brace of block)
-    else => {
-      std.debug.print("Error: Unexpected token {} at statement level\n", .{token});
-      return error.UnexpectedToken;
-    },
+    else => return try self.report(
+      .err,
+      .SyntaxError,
+      token,
+      "Unexpected token",
+      "Check for missing characters or semicolons."
+    )
   }
 }
 
 fn compileDeclaration(self: *Compiler, lexer: *Lexer, is_const: bool) !void {
   const name_token = lexer.next();
   if (name_token.tag != .identifier) {
-    std.debug.print("Error: Expected identifier after {s}, got {}\n", .{ if (is_const) "const" else "var", name_token });
-    return error.ExpectedIdentifier;
+    return self.report(
+      .err,
+      .SyntaxError,
+      name_token,
+      "Invalid variable name",
+      "Use letters and underscores."
+    );
+  }
+
+  var declared_type: DataType = undefined;
+
+  if (lexer.peek().tag == .colon) {
+    _ = lexer.next();
+    const type_token = lexer.next();
+
+    declared_type = std.meta.stringToEnum(DataType, type_token.slice) orelse {
+      return self.report(
+        .err,
+        .TypeError,
+        type_token,
+        "Unknown data type",
+        "Valid types: int, float, str, bool."
+      );
+    };
+  } else {
+    const end_col = name_token.col + name_token.slice.len;
+
+    try self.report(
+      .err,
+      .SyntaxError,
+      .{
+        .tag = name_token.tag,
+        .slice = name_token.slice,
+        .line = name_token.line,
+        .col = end_col
+      },
+      "Missing type annotation (e.g., ': int')",
+      "SimpleScript requires explicit types."
+    );
   }
 
   const equals_token = lexer.next();
   if (equals_token.tag != .equals) {
-    std.debug.print("Error: Expected '=' after identifier, got {}\n", .{equals_token});
-    return error.ExpectedEquals;
+    return self.report(
+      .err,
+      .SyntaxError,
+      equals_token,
+      "Expected '=' after type",
+      "Every variable must be initialized with a value."
+    );
   }
 
-  // Parse the initialization expression
-  const llvm_val = try expressions_mod.parseExpression(self, lexer);
+  const expr_result = try expressions_mod.parseExpression(self, lexer);
+  if (declared_type != expr_result.dtype) {
+    return self.report(
+      .err,
+      .TypeError,
+      name_token,
+      "Type mismatch in assignment",
+      "The assigned value does not match the declared type."
+    );
+  }
 
-  // Allocate stack space for the variable
-  const i64_type = llvm.LLVMInt64TypeInContext(self.context);
-  const ptr = llvm.LLVMBuildAlloca(self.builder, i64_type, name_token.slice.ptr);
-  _ = llvm.LLVMBuildStore(self.builder, llvm_val, ptr);
+  const llvm_type = self.getLLVMType(declared_type);
+  const ptr = llvm.LLVMBuildAlloca(self.builder, llvm_type, name_token.slice.ptr);
+  _ = llvm.LLVMBuildStore(self.builder, expr_result.val, ptr);
 
-  // Store in symbol table
-  const name_copy = try self.allocator.dupe(u8, name_token.slice);
-  try self.locals.put(name_copy, .{ .llvm_value = ptr, .is_const = is_const });
+  if (self.locals.getEntry(name_token.slice)) |entry| {
+    entry.value_ptr.* = .{ .llvm_value = ptr, .is_const = is_const, .data_type = declared_type };
+  } else {
+    const name_copy = try self.allocator.dupe(u8, name_token.slice);
+    try self.locals.put(name_copy, .{ .llvm_value = ptr, .is_const = is_const, .data_type = declared_type });
+  }
 }
 
-// Compile say() function call
+pub fn compileAssignment(self: *Compiler, lexer: *Lexer, first_name_token: Token) !void {
+  var targets = std.ArrayListUnmanaged(Token){};
+  defer targets.deinit(self.allocator);
+
+  try targets.append(self.allocator, first_name_token);
+
+  while (lexer.peek().tag == .comma) {
+    _ = lexer.next();
+
+    const next_var = lexer.next();
+    if (next_var.tag != .identifier) return try self.report(
+      .err,
+      .SyntaxError,
+      next_var,
+      "Expected variable name after comma",
+      null
+    );
+
+    try targets.append(self.allocator, next_var);
+  }
+
+  const equals = lexer.next();
+  if (equals.tag != .equals) {
+    return self.report(
+      .err,
+      .SyntaxError,
+      equals,
+      "Expected '=' for assignment",
+      null
+    );
+  }
+
+  var values = std.ArrayListUnmanaged(expressions_mod.ExprResult){};
+  defer values.deinit(self.allocator);
+
+  for (0..targets.items.len) |i| {
+    const expr_res = try expressions_mod.parseExpression(self, lexer);
+    try values.append(self.allocator, expr_res);
+
+    if (i < targets.items.len - 1) {
+      const comma = lexer.next();
+      if (comma.tag != .comma) return try self.report(
+        .err,
+        .SyntaxError,
+        comma,
+        "Expected comma separating values",
+        "The number of values must match the number of variables."
+      );
+    }
+  }
+
+  if (values.items.len != targets.items.len) return try self.report(
+    .err,
+    .SyntaxError,
+    first_name_token,
+    "Assignment imbalance",
+    "You must provide the same number of values and variables."
+  );
+
+  for (targets.items, values.items) |target_token, val_result| {
+    const local = self.lookupVariable(target_token.slice) orelse {
+      return try self.report(.err, .NameError, target_token, "Undefined variable", null);
+    };
+
+    if (local.is_const) return try self.report(.err, .TypeError, target_token, "Cannot reassign a constant", null);
+
+    if (local.data_type != val_result.dtype) {
+      return try self.report(
+        .err,
+        .TypeError,
+        target_token,
+        "Incompatible type in swap",
+        "Attempting to assign a value of a different type to the variable."
+      );
+    }
+
+    _ = llvm.LLVMBuildStore(self.builder, val_result.val, local.llvm_value);
+  }
+}
+
+// Compile say(arg1, arg2, ...) function call
 pub fn compileSay(self: *Compiler, lexer: *Lexer) !void {
-  // Expect '('
   const lparen = lexer.next();
-  if (lparen.tag != .lparen) {
-    std.debug.print("Error: Expected '(' after 'say', got {}\n", .{lparen});
-    return error.ExpectedLParen;
+  if (lparen.tag != .lparen) return self.report(.err, .SyntaxError, lparen, "Missing '('", null);
+
+  var first = true;
+  while (lexer.peek().tag != .rparen and lexer.peek().tag != .eof) {
+    if (!first) {
+      const comma = lexer.next();
+      if (comma.tag != .comma) return self.report(.err, .SyntaxError, comma, "Expected ',' or ')'", null);
+
+      try self.printSpace();
+    }
+
+    const next_token = lexer.peek();
+
+    if (next_token.tag == .string) {
+      const str_token = lexer.next();
+      const str_z = try self.allocator.dupeZ(u8, str_token.slice);
+      defer self.allocator.free(str_z);
+      const str_val = llvm.LLVMBuildGlobalStringPtr(self.builder, str_z, "str");
+      try self.printString(str_val);
+    } else {
+      const expr_res = try expressions_mod.parseExpression(self, lexer);
+      switch (expr_res.dtype) {
+        .int, .bool => try self.printInt(expr_res.val),
+        .float => try self.printFloat(expr_res.val),
+        .str => try self.printString(expr_res.val),
+      }
+    }
+
+    first = false;
+
+    if (lexer.peek().tag != .comma) break;
   }
 
-  // Parse expression argument
-  const value = try expressions_mod.parseExpression(self, lexer);
-
-  // Expect ')'
   const rparen = lexer.next();
-  if (rparen.tag != .rparen) {
-    std.debug.print("Error: Expected ')' after expression, got {}\n", .{rparen});
-    return error.ExpectedRParen;
-  }
+  if (rparen.tag != .rparen) return self.report(.err, .SyntaxError, rparen, "Missing closing ')'", null);
 
-  // Generate print call
-  try self.printInt(value);
+  try self.printNewLine();
 }
 
 // Compile for loop: for i in start...end { body }
@@ -99,60 +249,32 @@ fn compileForLoop(self: *Compiler, lexer: *Lexer) !void {
 
   // Get iterator variable name
   const name_token = lexer.next();
-  if (name_token.tag != .identifier) {
-    std.debug.print("Error: Expected identifier after 'for', got {}\n", .{name_token});
-    return error.ExpectedIdentifier;
-  }
+  if (name_token.tag != .identifier) return self.report(.err, .SyntaxError, name_token, "Loop requires a variable (e.g., 'for i...')", null);
 
-  // Expect 'in' keyword
   const in_token = lexer.next();
-  if (in_token.tag != .kw_in) {
-    std.debug.print("Error: Expected 'in' after loop variable, got {}\n", .{in_token});
-    return error.ExpectedIn;
-  }
+  if (in_token.tag != .kw_in) return self.report(.err, .SyntaxError, in_token, "Expected keyword 'in'", "Syntax: for variable in start..end");
 
-  // Parse start value
-  const start_token = lexer.next();
-  if (start_token.tag != .number) {
-    std.debug.print("Error: Expected number for loop start, got {}\n", .{start_token});
-    return error.ExpectedNumber;
-  }
-  const start_val = try std.fmt.parseInt(i64, start_token.slice, 10);
-  const llvm_start = llvm.LLVMConstInt(i64_type, @bitCast(start_val), 0);
+  const start_res = try expressions_mod.parseExpression(self, lexer);
 
-  // Expect range operator '..'
   const range_token = lexer.next();
-  if (range_token.tag != .range) {
-    std.debug.print("Error: Expected '..' in for loop, got {}\n", .{range_token});
-    return error.ExpectedRange;
-  }
+  if (range_token.tag != .range) return self.report(.err, .SyntaxError, range_token, "Expected '..' to define range", null);
 
-  // Parse end value
-  const end_token = lexer.next();
-  if (end_token.tag != .number) {
-    std.debug.print("Error: Expected number for loop end, got {}\n", .{end_token});
-    return error.ExpectedNumber;
-  }
-  const end_val = try std.fmt.parseInt(i64, end_token.slice, 10);
-  const llvm_end = llvm.LLVMConstInt(i64_type, @bitCast(end_val), 0);
+  const end_res = try expressions_mod.parseExpression(self, lexer);
 
-  // Expect '{'
   const lbrace = lexer.next();
-  if (lbrace.tag != .lbrace) {
-    std.debug.print("Error: Expected '{{' to start loop body, got {}\n", .{lbrace});
-    return error.ExpectedLBrace;
-  }
+  if (lbrace.tag != .lbrace) return self.report(.err, .SyntaxError, lbrace, "Missing opening brace '{'", null);
 
   // Allocate loop variable and initialize
   const iter_ptr = llvm.LLVMBuildAlloca(self.builder, i64_type, name_token.slice.ptr);
-  _ = llvm.LLVMBuildStore(self.builder, llvm_start, iter_ptr);
+  _ = llvm.LLVMBuildStore(self.builder, start_res.val, iter_ptr);
 
-  // Add to symbol table (mutable)
-  const name_copy = try self.allocator.dupe(u8, name_token.slice);
-  try self.locals.put(name_copy, .{
-    .llvm_value = iter_ptr,
-    .is_const = false
-  });
+  // Store in symbol table
+  if (self.locals.getEntry(name_token.slice)) |entry| {
+    entry.value_ptr.* = .{ .llvm_value = iter_ptr, .is_const = false, .data_type = .int };
+  } else {
+    const name_copy = try self.allocator.dupe(u8, name_token.slice);
+    try self.locals.put(name_copy, .{ .llvm_value = iter_ptr, .is_const = false, .data_type = .int });
+  }
 
   // Create basic blocks
   const cond_bb = llvm.LLVMAppendBasicBlockInContext(
@@ -165,36 +287,23 @@ fn compileForLoop(self: *Compiler, lexer: *Lexer) !void {
     self.context, self.main_fn, "loop.end"
   );
 
-  // Jump to condition block
   _ = llvm.LLVMBuildBr(self.builder, cond_bb);
-
-  // Condition block: check if i < end
   llvm.LLVMPositionBuilderAtEnd(self.builder, cond_bb);
+
   const current_val = llvm.LLVMBuildLoad2(self.builder, i64_type, iter_ptr, "i");
-  const cond = llvm.LLVMBuildICmp(
-    self.builder, llvm.LLVMIntSLT, current_val, llvm_end, "cond"
-  );
+  const cond = llvm.LLVMBuildICmp(self.builder, llvm.LLVMIntSLT, current_val, end_res.val, "cond");
   _ = llvm.LLVMBuildCondBr(self.builder, cond, body_bb, after_bb);
 
-  // Body block: execute statements
   llvm.LLVMPositionBuilderAtEnd(self.builder, body_bb);
   while (true) {
     const token = lexer.next();
     if (token.tag == .rbrace) break;
-    if (token.tag == .eof) {
-      std.debug.print("Error: Unexpected EOF in loop body\n", .{});
-      return error.UnexpectedEOF;
-    }
+    if (token.tag == .eof) return self.report(.err, .SyntaxError, token, "Missing closing brace '}' for loop", null);
     try compileStatement(self, lexer, token);
   }
 
-  // Increment and loop back
-  const next_val = llvm.LLVMBuildAdd(
-    self.builder, current_val, llvm.LLVMConstInt(i64_type, 1, 0), "inc"
-  );
+  const next_val = llvm.LLVMBuildAdd(self.builder, current_val, llvm.LLVMConstInt(i64_type, 1, 0), "inc");
   _ = llvm.LLVMBuildStore(self.builder, next_val, iter_ptr);
   _ = llvm.LLVMBuildBr(self.builder, cond_bb);
-
-  // After block: continue after loop
   llvm.LLVMPositionBuilderAtEnd(self.builder, after_bb);
 }

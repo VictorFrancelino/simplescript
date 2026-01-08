@@ -1,6 +1,7 @@
 const std = @import("std");
 const Compiler = @import("compiler.zig").Compiler;
 const optimizer = @import("optimizer.zig");
+const statements = @import("statements.zig");
 
 pub fn main() !void {
   var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -11,16 +12,9 @@ pub fn main() !void {
   defer std.process.argsFree(allocator, args);
 
   if (args.len < 2) {
-    try std.io.getStdErr().writer().writeAll(
-      \\Usage: simplescript <file.ss>
-      \\
-      \\Compile SimpleScript source code to native executable.
-      \\
-      \\Example:
-      \\  simplescript hello.ss
-      \\
-    );
-    std.process.exit(1);
+    std.debug.print("Usage: simplescript <file.ss>\n", .{});
+    std.debug.print("Example: simplescript hello.ss\n", .{});
+    return;
   }
 
   const filename = args[1];
@@ -47,7 +41,10 @@ pub fn main() !void {
   var compiler = try Compiler.init(allocator, module_name);
   defer compiler.deinit();
 
-  try compiler.compile(source_code);
+  statements.compile(&compiler, source_code) catch {
+    std.process.exit(1);
+  };
+
   compiler.finish();
 
   // Generate object file
@@ -60,9 +57,8 @@ pub fn main() !void {
   try linkExecutable(allocator, output_name);
 
   // Success message
-  const stdout = std.io.getStdOut().writer();
-  try stdout.print("✓ Compiled successfully: {s}\n", .{output_name});
-  try stdout.print("Run with: ./{s}\n", .{output_name});
+  std.debug.print("✓ Compiled successfully: {s}\n", .{output_name});
+  std.debug.print("Run with: ./{s}\n", .{output_name});
 }
 
 fn readFile(allocator: std.mem.Allocator, path: []const u8, max_size: usize) ![]u8 {

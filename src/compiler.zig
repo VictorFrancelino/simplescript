@@ -1,20 +1,42 @@
 const std = @import("std");
 const parser = @import("parser.zig");
 const llvm_bindings = @import("llvm.zig");
-const statements = @import("statements.zig");
 
 const Lexer = parser.Lexer;
 const Token = parser.Token;
 const llvm = llvm_bindings.c;
 
-pub const Local = struct {
+pub const DiagnosticLevel = enum {
+  note,
+  warning,
+  err,
+  fatal,
+};
+
+pub const ErrorCode = enum {
+  SyntaxError,
+  TypeError,
+  NameError,
+  LinkerError,
+  InternalError,
+};
+
+pub const DataType = enum {
+  int,
+  float,
+  str,
+  bool
+};
+
+pub const Variable = struct {
   llvm_value: llvm.LLVMValueRef,
   is_const: bool,
+  data_type: DataType,
 };
 
 pub const Compiler = struct {
   allocator: std.mem.Allocator,
-  locals: std.StringHashMap(Local),
+  locals: std.StringHashMap(Variable),
 
   context: llvm.LLVMContextRef,
   module: llvm.LLVMModuleRef,
@@ -80,7 +102,7 @@ pub const Compiler = struct {
 
     return .{
       .allocator = allocator,
-      .locals = std.StringHashMap(Local).init(allocator),
+      .locals = std.StringHashMap(Variable).init(allocator),
       .context = context,
       .module = module,
       .builder = builder,
@@ -92,36 +114,36 @@ pub const Compiler = struct {
 
   pub fn deinit(self: *Compiler) void {
     // Free all symbol table keys
-    var iterator = self.locals.keyIterator();
-    while (iterator.next()) |key_ptr| self.allocator.free(key_ptr.*);
-    self.locals.deinit();
+    var iter = self.locals.keyIterator();
+    while (iter.next()) |key_ptr| self.allocator.free(key_ptr.*);
 
+    self.locals.deinit();
     llvm.LLVMDisposeBuilder(self.builder);
     llvm.LLVMDisposeModule(self.module);
     llvm.LLVMContextDispose(self.context);
   }
 
-  // Finalize main function with return 0
   pub fn finish(self: *Compiler) void {
     const i32_type = llvm.LLVMInt32TypeInContext(self.context);
     const zero = llvm.LLVMConstInt(i32_type, 0, 0);
     _ = llvm.LLVMBuildRet(self.builder, zero);
   }
 
-  pub const compile = statements.compile;
-  pub const compileStatement = statements.compileStatement;
-  pub const compileSay = statements.compileSay;
-
-  // Print an integer value to stdout
-  pub fn printInt(self: *Compiler, value: llvm.LLVMValueRef) !void {
-    // Create format string: "%lld\n"
-    const fmt_str = llvm.LLVMBuildGlobalStringPtr(
+  pub fn printString(self: *Compiler, str_value: llvm.LLVMValueRef) !void {
+    const fmt_str = llvm.LLVMBuildGlobalStringPtr(self.builder, "%s", "fmt.str");
+    var args = [_]llvm.LLVMValueRef{ fmt_str, str_value };
+    _ = llvm.LLVMBuildCall2(
       self.builder,
-      "%lld\n",
-      "fmt.int"
+      self.printf_type,
+      self.printf_fn,
+      &args,
+      args.len,
+      ""
     );
+  }
 
-    // Call printf(fmt_str, value)
+  pub fn printInt(self: *Compiler, value: llvm.LLVMValueRef) !void {
+    const fmt_str = llvm.LLVMBuildGlobalStringPtr(self.builder, "%lld", "fmt.int");
     var args = [_]llvm.LLVMValueRef{ fmt_str, value };
     _ = llvm.LLVMBuildCall2(
       self.builder,
@@ -133,27 +155,92 @@ pub const Compiler = struct {
     );
   }
 
-  // Get the i64 type for this context
+  pub fn printFloat(self: *Compiler, value: llvm.LLVMValueRef) !void {
+    const fmt_str = llvm.LLVMBuildGlobalStringPtr(self.builder, "%f", "fmt.float");
+    var args = [_]llvm.LLVMValueRef{ fmt_str, value };
+    _ = llvm.LLVMBuildCall2(
+      self.builder,
+      self.printf_type,
+      self.printf_fn,
+      &args,
+      args.len,
+      ""
+    );
+  }
+
+  pub fn printNewLine(self: *Compiler) !void {
+    const fmt_str = llvm.LLVMBuildGlobalStringPtr(self.builder, "\n", "fmt.nl");
+    var args = [_]llvm.LLVMValueRef{ fmt_str };
+    _ = llvm.LLVMBuildCall2(self.builder, self.printf_type, self.printf_fn, &args, args.len, "");
+  }
+
+  pub fn printSpace(self: *Compiler) !void {
+    const fmt_str = llvm.LLVMBuildGlobalStringPtr(self.builder, " ", "fmt.sp");
+    var args = [_]llvm.LLVMValueRef{ fmt_str };
+    _ = llvm.LLVMBuildCall2(self.builder, self.printf_type, self.printf_fn, &args, args.len, "");
+  }
+
+  pub fn report(
+    self: *Compiler,
+    level: DiagnosticLevel,
+    code: ErrorCode,
+    token: parser.Token,
+    message: []const u8,
+    extra: ?[]const u8,
+  ) anyerror!void {
+    _ = self;
+
+    const color = switch (level) {
+      .err, .fatal => "\x1b[31m",
+      .warning => "\x1b[33m",
+      .note => "\x1b[36m",
+    };
+    const reset = "\x1b[0m";
+
+    std.debug.print("{s}[{s}]{s} at line {d}, col {d}: {s}\n", .{
+      color,
+      @tagName(code),
+      reset,
+      token.line,
+      token.col,
+      message,
+    });
+
+    if (extra) |e| std.debug.print("  └─ {s}Hint: {s}{s}\n", .{ "\x1b[32m", e, reset });
+
+    if (level == .err or level == .fatal) {
+      if (level == .fatal) std.process.exit(1);
+      return error.CompileError;
+    }
+
+    return;
+  }
+
+  pub fn getLLVMType(self: *const Compiler, dtype: DataType) llvm.LLVMTypeRef {
+    return switch (dtype) {
+      .int => llvm.LLVMInt64TypeInContext(self.context),
+      .float => llvm.LLVMDoubleTypeInContext(self.context),
+      .bool => llvm.LLVMInt1TypeInContext(self.context),
+      .str => llvm.LLVMPointerType(llvm.LLVMInt8TypeInContext(self.context), 0),
+    };
+  }
+
   pub inline fn getI64Type(self: *const Compiler) llvm.LLVMTypeRef {
     return llvm.LLVMInt64TypeInContext(self.context);
   }
 
-  // Get the i32 type for this context
   pub inline fn getI32Type(self: *const Compiler) llvm.LLVMTypeRef {
     return llvm.LLVMInt32TypeInContext(self.context);
   }
 
-  // Get the i8 type for this context
   pub inline fn getI8Type(self: *const Compiler) llvm.LLVMTypeRef {
     return llvm.LLVMInt8TypeInContext(self.context);
   }
 
-  // Look up a variable by name
-  pub fn lookupVariable(self: *const Compiler, name: []const u8) ?Local {
+  pub fn lookupVariable(self: *const Compiler, name: []const u8) ?Variable {
     return self.locals.get(name);
   }
 
-  // Check if a variable exists
   pub fn hasVariable(self: *const Compiler, name: []const u8) bool {
     return self.locals.contains(name);
   }

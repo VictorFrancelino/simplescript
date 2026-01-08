@@ -113,7 +113,6 @@ fn runOptimizationPasses(
   );
 
   if (result != null) {
-    defer llvm.LLVMDisposeErrorMessage(result);
     std.debug.print("Error: Optimization passes failed\n", .{});
     return error.LLVMOptimizationFailed;
   }

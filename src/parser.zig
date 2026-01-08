@@ -7,6 +7,7 @@ pub const TokenType = enum {
   asterisk,
   slash,
   equals,
+  comma,
 
   // Delimiters
   lparen,
@@ -22,11 +23,14 @@ pub const TokenType = enum {
   kw_in,
 
   // Literals
-  number,
+  int,
+  float,
   string,
+  bool,
   identifier,
 
   // Special
+  colon,
   eof,
   invalid,
 };
@@ -34,6 +38,8 @@ pub const TokenType = enum {
 pub const Token = struct {
   tag: TokenType,
   slice: []const u8,
+  line: usize,
+  col: usize,
 
   pub fn format(
     self: Token,
@@ -43,17 +49,19 @@ pub const Token = struct {
   ) !void {
     _ = fmt;
     _ = options;
-    try writer.print("{s}('{s}')", .{ @tagName(self.tag), self.slice });
+    try writer.print("{s}('{s}') at {d}:{d}", .{ @tagName(self.tag), self.slice, self.line, self.col });
   }
 };
 
 pub const Lexer = struct {
   buffer: []const u8,
   pos: usize = 0,
+  line: usize = 1,
+  col: usize = 1,
   peeked_token: ?Token = null,
 
   pub fn init(buffer: []const u8) Lexer {
-    .{ .buffer = buffer };
+    return .{ .buffer = buffer };
   }
 
   // Get next token, consuming it
@@ -75,46 +83,61 @@ pub const Lexer = struct {
 
   fn scanToken(self: *Lexer) Token {
     self.skipWhitespace();
-    if (self.pos >= self.buffer.len) return .{ .tag = .EOF, .slice = "" };
 
-    const start = self.pos;
-    const char = self.buffer[self.pos];
+    const start_line = self.line;
+    const start_col = self.col;
+    const start_pos = self.pos;
+
+    if (self.pos >= self.buffer.len) {
+      return .{ .tag = .eof, .slice = "", .line = start_line, .col = start_col };
+    }
+
+    const char = self.advance();
 
     return switch (char) {
-      '(' => self.makeSingleToken(.lparen),
-      ')' => self.makeSingleToken(.rparen),
-      '{' => self.makeSingleToken(.lbrace),
-      '}' => self.makeSingleToken(.rbrace),
-      '+' => self.makeSingleToken(.plus),
-      '-' => self.makeSingleToken(.minus),
-      '*' => self.makeSingleToken(.asterisk),
-      '/' => self.makeSingleToken(.slash),
-      '=' => self.makeSingleToken(.equals),
-      '.' => blk: {
-        if (self.peekChar(1) == '.') {
-          self.pos += 2;
-          break :blk .{ .tag = .range, .slice = self.buffer[start..self.pos] };
+      '(' => self.makeSingleToken(.lparen, start_line, start_col),
+      ')' => self.makeSingleToken(.rparen, start_line, start_col),
+      '{' => self.makeSingleToken(.lbrace, start_line, start_col),
+      '}' => self.makeSingleToken(.rbrace, start_line, start_col),
+      '+' => self.makeSingleToken(.plus, start_line, start_col),
+      '-' => self.makeSingleToken(.minus, start_line, start_col),
+      '*' => self.makeSingleToken(.asterisk, start_line, start_col),
+      '/' => blk: {
+        if (self.peekChar(0) == '/') {
+          while (self.pos < self.buffer.len and self.peekChar(0) != '\n') _ = self.advance();
+          break :blk self.scanToken();
         }
-        self.pos += 1;
-        break :blk .{ .tag = .invalid, .slice = self.buffer[start..self.pos] };
+
+        break :blk self.makeSingleToken(.slash, start_line, start_col);
       },
-      '\'' => self.scanString(),
-      '0'...'9' => self.scanNumber(),
-      'a'...'z', 'A'...'Z', '_' => self.scanIdentifier(),
-      else => self.makeSingleToken(.invalid),
+      ':' => self.makeSingleToken(.colon, start_line, start_col),
+      ',' => self.makeSingleToken(.comma, start_line, start_col),
+      '=' => self.makeSingleToken(.equals, start_line, start_col),
+      '.' => blk: {
+        if (self.peekChar(0) == '.') {
+          _ = self.advance();
+          break :blk .{ .tag = .range, .slice = self.buffer[start_pos..self.pos], .line = start_line, .col = start_col };
+        }
+
+        break :blk .{ .tag = .invalid, .slice = self.buffer[start_pos..self.pos], .line = start_line, .col = start_col };
+      },
+      '\'' => self.scanString(start_line, start_col),
+      '0'...'9' => self.scanNumber(start_line, start_col),
+      'a'...'z', 'A'...'Z', '_' => self.scanIdentifier(start_line, start_col),
+      else => .{ .tag = .invalid, .slice = self.buffer[start_pos..self.pos], .line = start_line, .col = start_col }
     };
   }
 
-  inline fn makeSingleToken(self: *Lexer, tag: TokenType) Token {
-    const slice = self.buffer[self.pos..][0..1];
-    self.pos += 1;
-    return .{ .tag = tag, .slice = slice };
+  inline fn makeSingleToken(self: *Lexer, tag: TokenType, line: usize, col: usize) Token {
+    const slice = self.buffer[self.pos - 1..self.pos];
+    return .{ .tag = tag, .slice = slice, .line = line, .col = col };
   }
 
   fn skipWhitespace(self: *Lexer) void {
     while (self.pos < self.buffer.len) {
-      switch (self.buffer[self.pos]) {
-        ' ', '\t', '\r', '\n' => self.pos += 1,
+      const char = self.peekChar(0);
+      switch (char) {
+        ' ', '\t', '\r', '\n' => _ = self.advance(),
         else => break,
       }
     }
@@ -125,50 +148,54 @@ pub const Lexer = struct {
     return if (target < self.buffer.len) self.buffer[target] else 0;
   }
 
-  fn scanString(self: *Lexer) Token {
-    _ = self.pos;
-    self.pos += 1; // Skip opening quote
-
+  fn scanString(self: *Lexer, start_line: usize, start_col: usize) Token {
     const content_start = self.pos;
 
-    // Find closing quote
-    while (self.pos < self.buffer.len and self.buffer[self.pos] != '\'') self.pos += 1;
+    while (self.pos < self.buffer.len and self.peekChar(0) != '\'') _ = self.advance();
 
     const content = self.buffer[content_start..self.pos];
 
-    // Skip closing quote if present
-    if (self.pos < self.buffer.len) self.pos += 1;
+    if (self.pos < self.buffer.len) _ = self.advance();
 
-    return .{ .tag = .string, .slice = content };
+    return .{ .tag = .string, .slice = content, .line = start_line, .col = start_col };
   }
 
-  fn scanNumber(self: *Lexer) Token {
-    const start = self.pos;
+  fn scanNumber(self: *Lexer, start_line: usize, start_col: usize) Token {
+    const start_pos = self.pos - 1;
+    var is_float = false;
 
-    // Integer part
-    while (self.pos < self.buffer.len and std.ascii.isDigit(self.buffer[self.pos])) self.pos += 1;
-
-    return .{ .tag = .number, .slice = self.buffer[start..self.pos] };
-  }
-
-  fn scanIdentifier(self: *Lexer) Token {
-    const start = self.pos;
-
-    // First character already checked in scanToken
-    self.pos += 1;
-
-    // Continue while alphanumeric or underscore
     while (self.pos < self.buffer.len) {
-      const char = self.buffer[self.pos];
-      if (std.ascii.isAlphanumeric(char) or char == '_') {
-        self.pos += 1;
+      const char = self.peekChar(0);
+      if (char == '.') {
+        if (self.peekChar(1) == '.') break;
+        is_float = true;
+        _ = self.advance();
+      } else if (std.ascii.isDigit(char)) {
+        _ = self.advance();
+      }
+      else break;
+    }
+
+    return .{
+      .tag = if (is_float) .float else .int,
+      .slice = self.buffer[start_pos..self.pos],
+      .line = start_line,
+      .col = start_col
+    };
+  }
+
+  fn scanIdentifier(self: *Lexer, start_line: usize, start_col: usize) Token {
+    const start_pos = self.pos - 1;
+
+    while (self.pos < self.buffer.len) {
+      const c = self.peekChar(0);
+      if (std.ascii.isAlphanumeric(c) or c == '_') {
+        _ = self.advance();
       } else break;
     }
 
-    const slice = self.buffer[start..self.pos];
-    const tag = getKeyword(slice);
-
-    return .{ .tag = tag, .slice = slice };
+    const slice = self.buffer[start_pos..self.pos];
+    return .{ .tag = getKeyword(slice), .slice = slice, .line = start_line, .col = start_col };
   }
 
   // Keywords lookup - comptime for zero runtime cost
@@ -180,5 +207,19 @@ pub const Lexer = struct {
       .{ "in", .kw_in },
     });
     return map.get(text) orelse .identifier;
+  }
+
+  fn advance(self: *Lexer) u8 {
+    if (self.pos >= self.buffer.len) return 0;
+
+    const char = self.buffer[self.pos];
+    self.pos += 1;
+
+    if (char == '\n') {
+      self.line += 1;
+      self.col = 1;
+    } else self.col += 1;
+
+    return char;
   }
 };

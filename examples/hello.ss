@@ -1,10 +1,16 @@
 // Hello World in SimpleScript
-// Demonstrates basic arithmetic and output
+// Showcases basic types and the 'say' function
 
-say('Hello World')
+say('--- Welcome to SimpleScript ---')
 
-var answer = 42
-say(answer)
+const language: str = 'SimpleScript'
+const version: float = 0.4
 
-var calculation = 10 + 20 + 12
-say(calculation)
+say('Language:', language)
+say('Version:', version)
+
+var a: int = 10
+var b: int = 20
+var result: int = (a + b) * 2
+
+say('Expression result (10 + 20) * 2:', result)
