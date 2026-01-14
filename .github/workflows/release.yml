@@ -41,10 +41,18 @@ jobs:
 
       - name: Install LLVM 21 (Windows)
         if: matrix.os == 'windows-latest'
+        uses: kappel/setup-llvm@v1
+        with:
+          version: "21.x"
+
+      - name: Create LLVM Alias (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
         run: |
-          choco install llvm --version=21 -y
-          copy "C:\Program Files\LLVM\bin\llvm-config.exe" "C:\Program Files\LLVM\bin\llvm-config-21.exe"
-          echo "C:\Program Files\LLVM\bin" >> $GITHUB_PATH
+          $LlvmPath = (Get-Command llvm-config).Source
+          $NewPath = $LlvmPath.Replace("llvm-config.exe", "llvm-config-21.exe")
+          Copy-Item $LlvmPath $NewPath
+          echo "LLVM 21 configurado no Windows"
 
       - name: Install LLVM 21 (macOS)
         if: matrix.os == 'macos-latest'
