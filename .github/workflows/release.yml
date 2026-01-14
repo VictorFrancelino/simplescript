@@ -44,16 +44,23 @@ jobs:
         shell: pwsh
         run: |
           choco install llvm -y
-          $llvmConfig = Get-ChildItem -Path "C:\Program Files\LLVM", "C:\Program Files (x86)\LLVM" -Filter "llvm-config.exe" -Recurse | Select-Object -First 1
+          $llvmConfig = Get-Command llvm-config -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+
+          if (!$llvmConfig) {
+            $llvmConfig = Get-ChildItem -Path "C:\Program Files\LLVM\bin\llvm-config.exe", "C:\Program Files (x86)\LLVM\bin\llvm-config.exe" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+          }
+
+          if (!$llvmConfig) {
+            $llvmConfig = Get-ChildItem -Path "C:\ProgramData\chocolatey\bin\llvm-config.exe" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+          }
+
           if ($llvmConfig) {
-            $llvmBin = $llvmConfig.DirectoryName
+            $llvmBin = Split-Path -Parent $llvmConfig
             Write-Host "LLVM encontrado em: $llvmBin"
-            if (!(Test-Path "$llvmBin\llvm-config-21.exe")) {
-              Copy-Item "$llvmBin\llvm-config.exe" "$llvmBin\llvm-config-21.exe"
-            }
+            Copy-Item "$llvmBin\llvm-config.exe" "$llvmBin\llvm-config-21.exe" -Force
             Add-Content -Path $env:GITHUB_PATH -Value "$llvmBin"
           } else {
-            Write-Error "Erro: llvm-config.exe não foi encontrado após a instalação."
+            Write-Error "Não foi possível localizar o llvm-config.exe. A instalação do LLVM pode estar corrompida."
             exit 1
           }
 
