@@ -44,11 +44,17 @@ jobs:
         shell: pwsh
         run: |
           choco install llvm -y
-          $llvmBin = "C:\Program Files\LLVM\bin"
-          if (Test-Path "$llvmBin\llvm-config.exe") {
-            Copy-Item "$llvmBin\llvm-config.exe" "$llvmBin\llvm-config-21.exe"
+          $llvmConfig = Get-ChildItem -Path "C:\Program Files\LLVM", "C:\Program Files (x86)\LLVM" -Filter "llvm-config.exe" -Recurse | Select-Object -First 1
+          if ($llvmConfig) {
+            $llvmBin = $llvmConfig.DirectoryName
+            Write-Host "LLVM encontrado em: $llvmBin"
+            if (!(Test-Path "$llvmBin\llvm-config-21.exe")) {
+              Copy-Item "$llvmBin\llvm-config.exe" "$llvmBin\llvm-config-21.exe"
+            }
             Add-Content -Path $env:GITHUB_PATH -Value "$llvmBin"
-            Write-Host "LLVM configurado com sucesso no Windows."
+          } else {
+            Write-Error "Erro: llvm-config.exe não foi encontrado após a instalação."
+            exit 1
           }
 
       - name: Install LLVM 21 (macOS)
