@@ -1,0 +1,78 @@
+name: Release SimpleScript
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: simplescript-linux
+            asset_name: simplescript-v0.5.0-linux-x86_64.tar.gz
+          - os: windows-latest
+            artifact_name: simplescript.exe
+            asset_name: simplescript-v0.5.0-windows-x86_64.zip
+          - os: macos-latest
+            artifact_name: simplescript
+            asset_name: simplescript-v0.5.0-macos-arm64.tar.gz
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Install LLVM 21 (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 21
+          sudo apt-get install -y llvm-21-dev libclang-21-dev
+
+      - name: Install LLVM 21 (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          choco install llvm --version=21.1.8 -y
+          echo "C:\Program Files\LLVM\bin" >> $GITHUB_PATH
+
+      - name: Install LLVM 21 (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install llvm@21
+          echo "/opt/homebrew/opt/llvm@21/bin" >> $GITHUB_PATH
+
+      - name: Build SimpleScript
+        run: zig build -Doptimize=ReleaseSafe
+
+      - name: Package Release (Linux/macOS)
+        if: matrix.os != 'windows-latest'
+        run: |
+          mkdir -p dist/bin
+          cp zig-out/bin/simplescript dist/bin/
+          cp -r examples dist/
+          tar -czvf ${{ matrix.asset_name }} -C dist .
+
+      - name: Package Release (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          mkdir dist\bin
+          copy zig-out\bin\simplescript.exe dist\bin\
+          xcopy /E /I examples dist\examples
+          powershell Compress-Archive -Path dist\* -DestinationPath ${{ matrix.asset_name }}
+
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.asset_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -37,6 +37,7 @@ pub const Variable = struct {
 pub const Compiler = struct {
   allocator: std.mem.Allocator,
   locals: std.StringHashMap(Variable),
+  scope_level: u32 = 0,
 
   context: llvm.LLVMContextRef,
   module: llvm.LLVMModuleRef,
@@ -127,6 +128,14 @@ pub const Compiler = struct {
     const i32_type = llvm.LLVMInt32TypeInContext(self.context);
     const zero = llvm.LLVMConstInt(i32_type, 0, 0);
     _ = llvm.LLVMBuildRet(self.builder, zero);
+  }
+
+  pub fn enterScope(self: *Compiler) void {
+    self.scope_level += 1;
+  }
+
+  pub fn exitScope(self: *Compiler) void {
+    self.scope_level -= 1;
   }
 
   pub fn printString(self: *Compiler, str_value: llvm.LLVMValueRef) !void {

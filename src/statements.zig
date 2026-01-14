@@ -28,6 +28,7 @@ pub fn compileStatement(self: *Compiler, lexer: *Lexer, token: Token) anyerror!v
     .kw_var => try compileDeclaration(self, lexer, false),
     .kw_const => try compileDeclaration(self, lexer, true),
     .kw_for => try compileForLoop(self, lexer),
+    .kw_if => try compileIf(self, lexer),
     .identifier => {
       if (std.mem.eql(u8, token.slice, "say")) { try compileSay(self, lexer); }
       else try compileAssignment(self, lexer, token);
@@ -261,9 +262,6 @@ fn compileForLoop(self: *Compiler, lexer: *Lexer) !void {
 
   const end_res = try expressions_mod.parseExpression(self, lexer);
 
-  const lbrace = lexer.next();
-  if (lbrace.tag != .lbrace) return self.report(.err, .SyntaxError, lbrace, "Missing opening brace '{'", null);
-
   // Allocate loop variable and initialize
   const iter_ptr = llvm.LLVMBuildAlloca(self.builder, i64_type, name_token.slice.ptr);
   _ = llvm.LLVMBuildStore(self.builder, start_res.val, iter_ptr);
@@ -295,15 +293,65 @@ fn compileForLoop(self: *Compiler, lexer: *Lexer) !void {
   _ = llvm.LLVMBuildCondBr(self.builder, cond, body_bb, after_bb);
 
   llvm.LLVMPositionBuilderAtEnd(self.builder, body_bb);
-  while (true) {
-    const token = lexer.next();
-    if (token.tag == .rbrace) break;
-    if (token.tag == .eof) return self.report(.err, .SyntaxError, token, "Missing closing brace '}' for loop", null);
-    try compileStatement(self, lexer, token);
-  }
+  try parseBlock(self, lexer);
 
   const next_val = llvm.LLVMBuildAdd(self.builder, current_val, llvm.LLVMConstInt(i64_type, 1, 0), "inc");
   _ = llvm.LLVMBuildStore(self.builder, next_val, iter_ptr);
   _ = llvm.LLVMBuildBr(self.builder, cond_bb);
   llvm.LLVMPositionBuilderAtEnd(self.builder, after_bb);
+}
+
+fn compileIf(compiler: *Compiler, lexer: *Lexer) !void {
+  const condition = try expressions_mod.parseExpression(compiler, lexer);
+  if (condition.dtype != .bool) return error.TypeMismatch;
+
+  const parent_func = compiler.main_fn;
+
+  const then_block = llvm.LLVMAppendBasicBlockInContext(compiler.context, parent_func, "then");
+  const else_block = llvm.LLVMAppendBasicBlockInContext(compiler.context, parent_func, "else");
+  const merge_block = llvm.LLVMAppendBasicBlockInContext(compiler.context, parent_func, "ifcont");
+
+  _ = llvm.LLVMBuildCondBr(compiler.builder, condition.val, then_block, else_block);
+
+  llvm.LLVMPositionBuilderAtEnd(compiler.builder, then_block);
+  try parseBlock(compiler, lexer);
+  _ = llvm.LLVMBuildBr(compiler.builder, merge_block);
+
+  llvm.LLVMPositionBuilderAtEnd(compiler.builder, else_block);
+
+  const next_token = lexer.peek();
+  if (next_token.tag == .kw_else) {
+    _ = lexer.next();
+
+    if (lexer.peek().tag == .kw_if) {
+      _ = lexer.next();
+      try compileIf(compiler, lexer);
+    } else {
+      try parseBlock(compiler, lexer);
+    }
+  }
+
+  _ = llvm.LLVMBuildBr(compiler.builder, merge_block);
+  llvm.LLVMPositionBuilderAtEnd(compiler.builder, merge_block);
+}
+
+fn parseBlock(self: *Compiler, lexer: *Lexer) !void {
+  const lbrace = lexer.next();
+  if (lbrace.tag != .lbrace) {
+    return self.report(.err, .SyntaxError, lbrace, "Missing opening brace '{'", null);
+  }
+
+  self.enterScope();
+
+  while (lexer.peek().tag != .rbrace and lexer.peek().tag != .eof) {
+    const token = lexer.next();
+    try compileStatement(self, lexer, token);
+  }
+
+  const rbrace = lexer.next();
+  if (rbrace.tag != .rbrace) {
+    return self.report(.err, .SyntaxError, rbrace, "Missing closing brace '}'", null);
+  }
+
+  self.exitScope();
 }

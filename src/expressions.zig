@@ -29,6 +29,7 @@ const Precedence = enum(u8) {
 // Get operator precedence for a token
 fn getPrecedence(token: Token) Precedence {
   return switch (token.tag) {
+    .equal_equal, .bang_equal, .less, .less_equal, .greater, .greater_equal => .comparison,
     .plus, .minus => .term,
     .asterisk, .slash => .factor,
     else => .none,
@@ -52,7 +53,7 @@ fn parsePrecedence(
   min_precedence: Precedence,
 ) anyerror!ExprResult {
   // Parse left operand (highest precedence)
-  var left = try parsePrimary(compiler, lexer);
+  var left = try parseUnary(compiler, lexer);
 
   // Parse operators while they have higher or equal precedence
   while (true) {
@@ -83,6 +84,14 @@ fn parsePrimary(compiler: *Compiler, lexer: *Lexer) anyerror!ExprResult {
   const token = lexer.next();
 
   return switch (token.tag) {
+    .kw_true => ExprResult {
+      .val = llvm.LLVMConstInt(llvm.LLVMInt1TypeInContext(compiler.context), 1, 0),
+      .dtype = .bool
+    },
+    .kw_false => ExprResult{
+      .val = llvm.LLVMConstInt(llvm.LLVMInt1TypeInContext(compiler.context), 0, 0),
+      .dtype = .bool
+    },
     .string => try parseString(compiler, token),
     .int => try parseNumber(compiler, token, .int),
     .float => try parseNumber(compiler, token, .float),
@@ -93,6 +102,18 @@ fn parsePrimary(compiler: *Compiler, lexer: *Lexer) anyerror!ExprResult {
       return error.UnexpectedToken;
     },
   };
+}
+
+fn parseUnary(compiler: *Compiler, lexer: *Lexer) anyerror!ExprResult {
+  const token = lexer.peek();
+
+  if (token.tag == .minus) {
+    const operator = lexer.next();
+    const operand = try parseUnary(compiler, lexer);
+    return generateUnaryOp(compiler, operator.tag, operand);
+  }
+
+  return parsePrimary(compiler, lexer);
 }
 
 fn parseString(compiler: *Compiler, token: Token) !ExprResult {
@@ -122,7 +143,7 @@ fn parseIdentifier(compiler: *Compiler, token: Token) !ExprResult {
   };
 
   const llvm_type = compiler.getLLVMType(local.data_type);
-  const val = llvm.LLVMBuildLoad2(compiler.builder, llvm_type, local.llvm_value, token.slice.ptr);
+  const val = llvm.LLVMBuildLoad2(compiler.builder, llvm_type, local.llvm_value, "");
 
   return ExprResult{ .val = val, .dtype = local.data_type };
 }
@@ -151,23 +172,113 @@ fn generateBinaryOp(
     return error.TypeMismatch;
   }
 
-  const val = switch (left.dtype) {
-    .int => switch (operator) {
-      .plus => llvm.LLVMBuildAdd(compiler.builder, left.val, right.val, "add"),
-      .minus => llvm.LLVMBuildSub(compiler.builder, left.val, right.val, "sub"),
-      .asterisk => llvm.LLVMBuildMul(compiler.builder, left.val, right.val, "mul"),
-      .slash => llvm.LLVMBuildSDiv(compiler.builder, left.val, right.val, "div"),
-      else => return error.InvalidOperator,
-    },
-    .float => switch (operator) {
-      .plus => llvm.LLVMBuildFAdd(compiler.builder, left.val, right.val, "fadd"),
-      .minus => llvm.LLVMBuildFSub(compiler.builder, left.val, right.val, "fsub"),
-      .asterisk => llvm.LLVMBuildFMul(compiler.builder, left.val, right.val, "fmul"),
-      .slash => llvm.LLVMBuildFDiv(compiler.builder, left.val, right.val, "fdiv"),
-      else => return error.InvalidOperator,
-    },
-    else => return error.OperationNotSupportedForType,
-  };
+  var res_val: llvm.LLVMValueRef = undefined;
+  var res_dtype: compiler_mod.DataType = left.dtype;
 
-  return ExprResult{ .val = val, .dtype = left.dtype };
+  switch (left.dtype) {
+    .int => {
+      res_val = switch (operator) {
+        .plus => llvm.LLVMBuildAdd(compiler.builder, left.val, right.val, "add"),
+        .minus => llvm.LLVMBuildSub(compiler.builder, left.val, right.val, "sub"),
+        .asterisk => llvm.LLVMBuildMul(compiler.builder, left.val, right.val, "mul"),
+        .slash => llvm.LLVMBuildSDiv(compiler.builder, left.val, right.val, "div"),
+        .equal_equal => blk: {
+          res_dtype = .bool;
+          break :blk llvm.LLVMBuildICmp(compiler.builder, llvm.LLVMIntEQ, left.val, right.val, "eq");
+        },
+        .bang_equal => blk: {
+          res_dtype = .bool;
+          break :blk llvm.LLVMBuildICmp(compiler.builder, llvm.LLVMIntNE, left.val, right.val, "ne");
+        },
+        .greater => blk: {
+          res_dtype = .bool;
+          break :blk llvm.LLVMBuildICmp(compiler.builder, llvm.LLVMIntSGT, left.val, right.val, "gt");
+        },
+        .less => blk: {
+          res_dtype = .bool;
+          break :blk llvm.LLVMBuildICmp(compiler.builder, llvm.LLVMIntSLT, left.val, right.val, "lt");
+        },
+        .greater_equal => blk: {
+          res_dtype = .bool;
+          break :blk llvm.LLVMBuildICmp(compiler.builder, llvm.LLVMIntSGE, left.val, right.val, "ge");
+        },
+        .less_equal => blk: {
+          res_dtype = .bool;
+          break :blk llvm.LLVMBuildICmp(compiler.builder, llvm.LLVMIntSLE, left.val, right.val, "le");
+        },
+        else => return error.InvalidOperator,
+      };
+    },
+    .float => {
+      res_val = switch (operator) {
+        .plus => llvm.LLVMBuildFAdd(compiler.builder, left.val, right.val, "fadd"),
+        .minus => llvm.LLVMBuildFSub(compiler.builder, left.val, right.val, "fsub"),
+        .asterisk => llvm.LLVMBuildFMul(compiler.builder, left.val, right.val, "fmul"),
+        .slash => llvm.LLVMBuildFDiv(compiler.builder, left.val, right.val, "fdiv"),
+        .equal_equal => blk: {
+          res_dtype = .bool;
+          break :blk llvm.LLVMBuildFCmp(compiler.builder, llvm.LLVMRealOEQ, left.val, right.val, "feq");
+        },
+        .bang_equal => blk: {
+          res_dtype = .bool;
+          break :blk llvm.LLVMBuildFCmp(compiler.builder, llvm.LLVMRealONE, left.val, right.val, "fne");
+        },
+        .greater => blk: {
+          res_dtype = .bool;
+          break :blk llvm.LLVMBuildFCmp(compiler.builder, llvm.LLVMRealOGT, left.val, right.val, "fgt");
+        },
+        .less => blk: {
+          res_dtype = .bool;
+          break :blk llvm.LLVMBuildFCmp(compiler.builder, llvm.LLVMRealOLT, left.val, right.val, "flt");
+        },
+        .greater_equal => blk: {
+          res_dtype = .bool;
+          break :blk llvm.LLVMBuildFCmp(compiler.builder, llvm.LLVMRealOGE, left.val, right.val, "fge");
+        },
+        .less_equal => blk: {
+          res_dtype = .bool;
+          break :blk llvm.LLVMBuildFCmp(compiler.builder, llvm.LLVMRealOLE, left.val, right.val, "fle");
+        },
+        else => return error.InvalidOperator,
+      };
+    },
+    .str => {
+      res_dtype = .bool;
+      res_val = switch (operator) {
+        .equal_equal => llvm.LLVMBuildICmp(compiler.builder, llvm.LLVMIntEQ, left.val, right.val, "seq"),
+        .bang_equal => llvm.LLVMBuildICmp(compiler.builder, llvm.LLVMIntNE, left.val, right.val, "sne"),
+        else => return error.OperationNotSupportedForType,
+      };
+    },
+    .bool => {
+      res_val = switch (operator) {
+        .equal_equal => llvm.LLVMBuildICmp(compiler.builder, llvm.LLVMIntEQ, left.val, right.val, "beq"),
+        else => return error.InvalidOperator,
+      };
+      res_dtype = .bool;
+    },
+  }
+
+  return ExprResult{ .val = res_val, .dtype = res_dtype };
+}
+
+fn generateUnaryOp(
+  compiler: *Compiler,
+  op_type: TokenType,
+  operand: ExprResult
+) !ExprResult {
+  switch (op_type) {
+    .minus => {
+      if (operand.dtype == .int) {
+        const val = llvm.LLVMBuildNeg(compiler.builder, operand.val, "neg");
+        return ExprResult{ .val = val, .dtype = .int };
+      } else if (operand.dtype == .float) {
+        const val = llvm.LLVMBuildFNeg(compiler.builder, operand.val, "fneg");
+        return ExprResult{ .val = val, .dtype = .float };
+      } else {
+        return error.TypeMismatch;
+      }
+    },
+    else => return error.InvalidOperator,
+  }
 }

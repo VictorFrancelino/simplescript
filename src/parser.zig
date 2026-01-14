@@ -21,6 +21,10 @@ pub const TokenType = enum {
   kw_const,
   kw_for,
   kw_in,
+  kw_if,
+  kw_else,
+  kw_true,
+  kw_false,
 
   // Literals
   int,
@@ -30,6 +34,12 @@ pub const TokenType = enum {
   identifier,
 
   // Special
+  equal_equal,
+  bang_equal,
+  greater_equal,
+  greater,
+  less_equal,
+  less,
   colon,
   eof,
   invalid,
@@ -110,9 +120,40 @@ pub const Lexer = struct {
 
         break :blk self.makeSingleToken(.slash, start_line, start_col);
       },
+      '<' => blk: {
+        if (self.peekChar(0) == '=') {
+          _ = self.advance();
+          break :blk .{ .tag = .less_equal, .slice = self.buffer[start_pos..self.pos], .line = start_line, .col = start_col };
+        }
+
+        break :blk .{ .tag = .less, .slice = self.buffer[start_pos..self.pos], .line = start_line, .col = start_col };
+      },
+      '>' => blk: {
+        if (self.peekChar(0) == '=') {
+          _ = self.advance();
+          break :blk .{ .tag = .greater_equal, .slice = self.buffer[start_pos..self.pos], .line = start_line, .col = start_col };
+        }
+
+        break :blk .{ .tag = .greater, .slice = self.buffer[start_pos..self.pos], .line = start_line, .col = start_col };
+      },
       ':' => self.makeSingleToken(.colon, start_line, start_col),
       ',' => self.makeSingleToken(.comma, start_line, start_col),
-      '=' => self.makeSingleToken(.equals, start_line, start_col),
+      '=' => blk: {
+        if (self.peekChar(0) == '=') {
+          _ = self.advance();
+          break :blk .{ .tag = .equal_equal, .slice = self.buffer[start_pos..self.pos], .line = start_line, .col = start_col };
+        }
+
+        break :blk .{ .tag = .equals, .slice = self.buffer[start_pos..self.pos], .line = start_line, .col = start_col };
+      },
+      '!' => blk: {
+        if (self.peekChar(0) == '=') {
+          _ = self.advance();
+          break :blk .{ .tag = .bang_equal, .slice = self.buffer[start_pos..self.pos], .line = start_line, .col = start_col };
+        }
+
+        break :blk .{ .tag = .invalid, .slice = self.buffer[start_pos..self.pos], .line = start_line, .col = start_col };
+      },
       '.' => blk: {
         if (self.peekChar(0) == '.') {
           _ = self.advance();
@@ -121,7 +162,8 @@ pub const Lexer = struct {
 
         break :blk .{ .tag = .invalid, .slice = self.buffer[start_pos..self.pos], .line = start_line, .col = start_col };
       },
-      '\'' => self.scanString(start_line, start_col),
+      '\"' => self.scanString('\"', start_line, start_col),
+      '\'' => self.scanString('\'', start_line, start_col),
       '0'...'9' => self.scanNumber(start_line, start_col),
       'a'...'z', 'A'...'Z', '_' => self.scanIdentifier(start_line, start_col),
       else => .{ .tag = .invalid, .slice = self.buffer[start_pos..self.pos], .line = start_line, .col = start_col }
@@ -148,10 +190,10 @@ pub const Lexer = struct {
     return if (target < self.buffer.len) self.buffer[target] else 0;
   }
 
-  fn scanString(self: *Lexer, start_line: usize, start_col: usize) Token {
+  fn scanString(self: *Lexer, delimiter: u8, start_line: usize, start_col: usize) Token {
     const content_start = self.pos;
 
-    while (self.pos < self.buffer.len and self.peekChar(0) != '\'') _ = self.advance();
+    while (self.pos < self.buffer.len and self.peekChar(0) != delimiter) _ = self.advance();
 
     const content = self.buffer[content_start..self.pos];
 
@@ -205,6 +247,10 @@ pub const Lexer = struct {
       .{ "const", .kw_const },
       .{ "for", .kw_for },
       .{ "in", .kw_in },
+      .{ "if", .kw_if },
+      .{ "else", .kw_else },
+      .{ "true", .kw_true },
+      .{ "false", .kw_false },
     });
     return map.get(text) orelse .identifier;
   }

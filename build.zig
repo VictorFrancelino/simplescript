@@ -13,9 +13,17 @@ pub fn build(b: *std.Build) void {
     }),
   });
 
+  const llvm_config = "llvm-config-21";
+
+  const include_path = b.run(&[_][]const u8{ llvm_config, "--includedir" });
+  const lib_path = b.run(&[_][]const u8{ llvm_config, "--libdir" });
+
+  exe.addIncludePath(.{ .cwd_relative = std.mem.trim(u8, include_path, " \n\r") });
+  exe.addLibraryPath(.{ .cwd_relative = std.mem.trim(u8, lib_path, " \n\r") });
+
   exe.linkLibC();
   exe.linkSystemLibrary("c++");
-  exe.linkSystemLibrary("LLVM-18");
+  exe.linkSystemLibrary("LLVM-21");
 
   if (target.result.os.tag == .linux) exe.linkSystemLibrary("z");
 
