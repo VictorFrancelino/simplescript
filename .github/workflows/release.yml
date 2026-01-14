@@ -41,24 +41,23 @@ jobs:
 
       - name: Install LLVM 21 (Windows)
         if: matrix.os == 'windows-latest'
-        uses: kappel/setup-llvm@v1
-        with:
-          version: "21.x"
-
-      - name: Create LLVM Alias (Windows)
-        if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          $LlvmPath = (Get-Command llvm-config).Source
-          $NewPath = $LlvmPath.Replace("llvm-config.exe", "llvm-config-21.exe")
-          Copy-Item $LlvmPath $NewPath
-          echo "LLVM 21 configurado no Windows"
+          choco install llvm -y
+          $llvmBin = "C:\Program Files\LLVM\bin"
+          if (Test-Path "$llvmBin\llvm-config.exe") {
+            Copy-Item "$llvmBin\llvm-config.exe" "$llvmBin\llvm-config-21.exe"
+            Add-Content -Path $env:GITHUB_PATH -Value "$llvmBin"
+            Write-Host "LLVM configurado com sucesso no Windows."
+          }
 
       - name: Install LLVM 21 (macOS)
         if: matrix.os == 'macos-latest'
         run: |
-          brew install llvm@21
-          echo "/opt/homebrew/opt/llvm@21/bin" >> $GITHUB_PATH
+          brew install llvm@21 || brew install llvm
+          LLVM_PATH=$(brew --prefix llvm@21 || brew --prefix llvm)
+          sudo ln -sf "$LLVM_PATH/bin/llvm-config" "$LLVM_PATH/bin/llvm-config-21"
+          echo "$LLVM_PATH/bin" >> $GITHUB_PATH
 
       - name: Build SimpleScript
         run: zig build -Doptimize=ReleaseSafe
