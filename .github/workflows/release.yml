@@ -43,24 +43,18 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          choco install llvm -y
-          $llvmConfig = Get-Command llvm-config -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+          choco install llvm --version=18.1.8 -y --force
+          $llvmBin = "C:\Program Files\LLVM\bin"
 
-          if (!$llvmConfig) {
-            $llvmConfig = Get-ChildItem -Path "C:\Program Files\LLVM\bin\llvm-config.exe", "C:\Program Files (x86)\LLVM\bin\llvm-config.exe" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
-          }
+          Write-Host "Verificando instalação em: $llvmBin"
+          ls "$llvmBin"
 
-          if (!$llvmConfig) {
-            $llvmConfig = Get-ChildItem -Path "C:\ProgramData\chocolatey\bin\llvm-config.exe" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
-          }
-
-          if ($llvmConfig) {
-            $llvmBin = Split-Path -Parent $llvmConfig
-            Write-Host "LLVM encontrado em: $llvmBin"
+          if (Test-Path "$llvmBin\llvm-config.exe") {
             Copy-Item "$llvmBin\llvm-config.exe" "$llvmBin\llvm-config-21.exe" -Force
             Add-Content -Path $env:GITHUB_PATH -Value "$llvmBin"
+            Write-Host "SUCESSO: LLVM configurado e PATH atualizado."
           } else {
-            Write-Error "Não foi possível localizar o llvm-config.exe. A instalação do LLVM pode estar corrompida."
+            Write-Error "CRÍTICO: O arquivo não apareceu em C:\Program Files\LLVM\bin mesmo após o install force."
             exit 1
           }
 
