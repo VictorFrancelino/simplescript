@@ -14,22 +14,18 @@ pub fn build(b: *std.Build) void {
   });
 
   if (target.result.os.tag == .windows) {
-    const llvm_include = std.process.getEnvVarOwned(b.allocator, "LLVM_INCLUDE_DIR") catch b.dupe("C:\\msys64\\mingw64\\include");
-    const llvm_lib = std.process.getEnvVarOwned(b.allocator, "LLVM_LIB_DIR") catch b.dupe("C:\\msys64\\mingw64\\lib");
+    const llvm_include = std.process.getEnvVarOwned(b.allocator, "LLVM_INCLUDE_DIR") catch b.dupe("C:\\Program Files\\LLVM\\include");
+    const llvm_lib = std.process.getEnvVarOwned(b.allocator, "LLVM_LIB_DIR") catch b.dupe("C:\\Program Files\\LLVM\\lib");
 
     exe.addIncludePath(.{ .cwd_relative = llvm_include });
     exe.addLibraryPath(.{ .cwd_relative = llvm_lib });
 
-    if (std.mem.indexOf(u8, llvm_lib, "msys64") != null) {
-      exe.linkSystemLibrary("LLVM");
-    } else {
-      exe.linkSystemLibrary("LLVM-C");
-    }
-
-    exe.linkSystemLibrary("stdc++");
+    exe.linkSystemLibrary("LLVM-C");
     exe.linkSystemLibrary("ole32");
     exe.linkSystemLibrary("uuid");
     exe.linkSystemLibrary("advapi32");
+    exe.linkSystemLibrary("shell32");
+    exe.linkSystemLibrary("user32");
   } else {
     const llvm_config = "llvm-config-21";
     const include_path = b.run(&[_][]const u8{ llvm_config, "--includedir" });
