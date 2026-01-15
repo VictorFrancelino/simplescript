@@ -41,6 +41,7 @@ pub const RelocMode = enum(c_uint) {
 pub fn findLLVMPath(allocator: std.mem.Allocator) ![]const u8 {
   if (builtin.os.tag == .windows) {
     const possible_paths = [_][]const u8{
+      "C:\\msys64\\mingw64", // MSYS2 (CI/CD)
       "C:\\Program Files\\LLVM",
       "C:\\Program Files (x86)\\LLVM",
       "C:\\LLVM",

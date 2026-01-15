@@ -14,10 +14,11 @@ pub fn build(b: *std.Build) void {
   });
 
   if (target.result.os.tag == .windows) {
-    const llvm_path = "C:\\Program Files\\LLVM";
+    const llvm_include = std.process.getEnvVarOwned(b.allocator, "LLVM_INCLUDE_DIR") catch b.dupe("C:\\msys64\\mingw64\\include");
+    const llvm_lib = std.process.getEnvVarOwned(b.allocator, "LLVM_LIB_DIR") catch b.dupe("C:\\msys64\\mingw64\\lib");
 
-    exe.addIncludePath(.{ .cwd_relative = b.fmt("{s}\\include", .{llvm_path}) });
-    exe.addLibraryPath(.{ .cwd_relative = b.fmt("{s}\\lib", .{llvm_path}) });
+    exe.addIncludePath(.{ .cwd_relative = llvm_include });
+    exe.addLibraryPath(.{ .cwd_relative = llvm_lib });
 
     exe.linkSystemLibrary("LLVM-C");
     exe.linkSystemLibrary("stdc++");

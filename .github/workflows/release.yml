@@ -41,12 +41,22 @@ jobs:
 
       - name: Install LLVM 21 (Windows)
         if: matrix.os == 'windows-latest'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-llvm
+            mingw-w64-x86_64-clang
+          path-type: inherit
+
+      - name: Configure LLVM paths (Windows)
+        if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          choco install llvm -y
-          echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          Write-Host "✓ LLVM instalado em: C:\Program Files\LLVM"
-          ls "C:\Program Files\LLVM\bin\clang.exe"
+          echo "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo "LLVM_INCLUDE_DIR=C:\msys64\mingw64\include" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "LLVM_LIB_DIR=C:\msys64\mingw64\lib" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Install LLVM 21 (macOS)
         if: matrix.os == 'macos-latest'

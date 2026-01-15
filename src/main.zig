@@ -3,6 +3,7 @@ const Compiler = @import("compiler.zig").Compiler;
 const optimizer = @import("optimizer.zig");
 const statements = @import("statements.zig");
 const llvm = @import("llvm_bindings.zig");
+const builtin = @import("builtin");
 
 pub fn main() !void {
   var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -105,9 +106,11 @@ fn readFile(allocator: std.mem.Allocator, path: []const u8, max_size: usize) ![]
 }
 
 fn linkExecutable(allocator: std.mem.Allocator, obj_name: []const u8, output_name: []const u8) !void {
+  const clang_cmd = if (builtin.os.tag == .windows) "clang" else "clang-21";
+
   const result = try std.process.Child.run(.{
     .allocator = allocator,
-    .argv = &[_][]const u8{ "clang-21", obj_name, "-o", output_name },
+    .argv = &[_][]const u8{ clang_cmd, obj_name, "-o", output_name },
   });
 
   defer allocator.free(result.stdout);
