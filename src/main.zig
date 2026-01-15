@@ -2,7 +2,7 @@ const std = @import("std");
 const Compiler = @import("compiler.zig").Compiler;
 const optimizer = @import("optimizer.zig");
 const statements = @import("statements.zig");
-const llvm = @import("llvm.zig");
+const llvm = @import("llvm_bindings.zig");
 
 pub fn main() !void {
   var gpa = std.heap.GeneralPurposeAllocator(.{}){};
