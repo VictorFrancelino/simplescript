@@ -2,6 +2,7 @@ const std = @import("std");
 const Compiler = @import("compiler.zig").Compiler;
 const optimizer = @import("optimizer.zig");
 const statements = @import("statements.zig");
+const llvm = @import("llvm.zig");
 
 pub fn main() !void {
   var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -16,6 +17,7 @@ pub fn main() !void {
 
     if (std.mem.eql(u8, first_arg, "--version") or std.mem.eql(u8, first_arg, "-v")) {
       std.debug.print("0.5.0\n", .{});
+      try llvm.printLLVMInfo(allocator);
       return;
     }
   }

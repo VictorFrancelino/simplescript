@@ -43,20 +43,10 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          choco install llvm --version=18.1.8 -y --force
-          $llvmBin = "C:\Program Files\LLVM\bin"
-
-          Write-Host "Verificando instalação em: $llvmBin"
-          ls "$llvmBin"
-
-          if (Test-Path "$llvmBin\llvm-config.exe") {
-            Copy-Item "$llvmBin\llvm-config.exe" "$llvmBin\llvm-config-21.exe" -Force
-            Add-Content -Path $env:GITHUB_PATH -Value "$llvmBin"
-            Write-Host "SUCESSO: LLVM configurado e PATH atualizado."
-          } else {
-            Write-Error "CRÍTICO: O arquivo não apareceu em C:\Program Files\LLVM\bin mesmo após o install force."
-            exit 1
-          }
+          choco install llvm -y
+          echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          Write-Host "✓ LLVM instalado em: C:\Program Files\LLVM"
+          ls "C:\Program Files\LLVM\bin\clang.exe"
 
       - name: Install LLVM 21 (macOS)
         if: matrix.os == 'macos-latest'
@@ -80,10 +70,10 @@ jobs:
       - name: Package Release (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          mkdir dist\bin
-          copy zig-out\bin\simplescript.exe dist\bin\
+          New-Item -ItemType Directory -Force -Path dist\bin
+          Copy-Item zig-out\bin\simplescript.exe dist\bin\
           xcopy /E /I examples dist\examples
-          powershell Compress-Archive -Path dist\* -DestinationPath ${{ matrix.asset_name }}
+          Compress-Archive -Path dist\* -DestinationPath ${{ matrix.asset_name }}
 
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v2

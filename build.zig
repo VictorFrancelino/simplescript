@@ -13,20 +13,35 @@ pub fn build(b: *std.Build) void {
     }),
   });
 
-  const llvm_config = "llvm-config-21";
+  if (target.result.os.tag == .windows) {
+    const llvm_path = "C:\\Program Files\\LLVM";
 
-  const include_path = b.run(&[_][]const u8{ llvm_config, "--includedir" });
-  const lib_path = b.run(&[_][]const u8{ llvm_config, "--libdir" });
+    exe.addIncludePath(.{ .cwd_relative = b.fmt("{s}\\include", .{llvm_path}) });
+    exe.addLibraryPath(.{ .cwd_relative = b.fmt("{s}\\lib", .{llvm_path}) });
 
-  exe.addIncludePath(.{ .cwd_relative = std.mem.trim(u8, include_path, " \n\r") });
-  exe.addLibraryPath(.{ .cwd_relative = std.mem.trim(u8, lib_path, " \n\r") });
+    exe.linkSystemLibrary("LLVM-C");
+    exe.linkSystemLibrary("stdc++");
+    exe.linkSystemLibrary("ole32");
+    exe.linkSystemLibrary("uuid");
+    exe.linkSystemLibrary("advapi32");
+  } else {
+    const llvm_config = "llvm-config-21";
+    const include_path = b.run(&[_][]const u8{ llvm_config, "--includedir" });
+    const lib_path = b.run(&[_][]const u8{ llvm_config, "--libdir" });
+
+    exe.addIncludePath(.{ .cwd_relative = std.mem.trim(u8, include_path, " \n\r") });
+    exe.addLibraryPath(.{ .cwd_relative = std.mem.trim(u8, lib_path, " \n\r") });
+
+    exe.linkSystemLibrary("c++");
+    exe.linkSystemLibrary("LLVM-21");
+
+    if (target.result.os.tag == .linux) {
+      exe.linkSystemLibrary("z");
+      exe.linkSystemLibrary("zstd");
+    }
+  }
 
   exe.linkLibC();
-  exe.linkSystemLibrary("c++");
-  exe.linkSystemLibrary("LLVM-21");
-
-  if (target.result.os.tag == .linux) exe.linkSystemLibrary("z");
-
   b.installArtifact(exe);
 
   const run_cmd = b.addRunArtifact(exe);
