@@ -20,7 +20,12 @@ pub fn build(b: *std.Build) void {
     exe.addIncludePath(.{ .cwd_relative = llvm_include });
     exe.addLibraryPath(.{ .cwd_relative = llvm_lib });
 
-    exe.linkSystemLibrary("LLVM-C");
+    if (std.mem.indexOf(u8, llvm_lib, "msys64") != null) {
+      exe.linkSystemLibrary("LLVM");
+    } else {
+      exe.linkSystemLibrary("LLVM-C");
+    }
+
     exe.linkSystemLibrary("stdc++");
     exe.linkSystemLibrary("ole32");
     exe.linkSystemLibrary("uuid");
