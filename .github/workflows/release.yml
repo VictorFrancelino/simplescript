@@ -43,12 +43,10 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          $url = "https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/LLVM-18.1.8-win64.exe"
-          Invoke-WebRequest -Uri $url -OutFile "llvm-installer.exe"
-          Start-Process -FilePath ".\llvm-installer.exe" -ArgumentList "/S" -Wait
-          echo "LLVM_INCLUDE_DIR=C:\Program Files\LLVM\include" >> $env:GITHUB_ENV
-          echo "LLVM_LIB_DIR=C:\Program Files\LLVM\lib" >> $env:GITHUB_ENV
-          echo "C:\Program Files\LLVM\bin" >> $env:GITHUB_PATH
+          choco install llvm -y
+          "LLVM_INCLUDE_DIR=C:\Program Files\LLVM\include" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "LLVM_LIB_DIR=C:\Program Files\LLVM\lib" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Install LLVM 21 (macOS)
         if: matrix.os == 'macos-latest'

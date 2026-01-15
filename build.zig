@@ -14,8 +14,11 @@ pub fn build(b: *std.Build) void {
   });
 
   if (target.result.os.tag == .windows) {
-    const llvm_include = std.process.getEnvVarOwned(b.allocator, "LLVM_INCLUDE_DIR") catch b.dupe("C:\\Program Files\\LLVM\\include");
-    const llvm_lib = std.process.getEnvVarOwned(b.allocator, "LLVM_LIB_DIR") catch b.dupe("C:\\Program Files\\LLVM\\lib");
+    const llvm_include_raw = std.process.getEnvVarOwned(b.allocator, "LLVM_INCLUDE_DIR") catch b.dupe("C:\\Program Files\\LLVM\\include");
+    const llvm_lib_raw = std.process.getEnvVarOwned(b.allocator, "LLVM_LIB_DIR") catch b.dupe("C:\\Program Files\\LLVM\\lib");
+
+    const llvm_include = std.mem.trim(u8, llvm_include_raw, " \n\r");
+    const llvm_lib = std.mem.trim(u8, llvm_lib_raw, " \n\r");
 
     exe.addIncludePath(.{ .cwd_relative = llvm_include });
     exe.addLibraryPath(.{ .cwd_relative = llvm_lib });
