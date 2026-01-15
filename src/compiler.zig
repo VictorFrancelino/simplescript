@@ -1,6 +1,6 @@
 const std = @import("std");
 const parser = @import("parser.zig");
-const llvm_bindings = @import("llvm.zig");
+const llvm_bindings = @import("llvm_bindings.zig");
 
 const Lexer = parser.Lexer;
 const Token = parser.Token;

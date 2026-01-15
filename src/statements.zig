@@ -2,7 +2,7 @@ const std = @import("std");
 const compiler_mod = @import("compiler.zig");
 const parser_mod = @import("parser.zig");
 const expressions_mod = @import("expressions.zig");
-const llvm_bindings = @import("llvm.zig");
+const llvm_bindings = @import("llvm_bindings.zig");
 
 const Compiler = compiler_mod.Compiler;
 const DataType = compiler_mod.DataType;

@@ -1,5 +1,5 @@
 const std = @import("std");
-const llvm_bindings = @import("llvm.zig");
+const llvm_bindings = @import("llvm_bindings.zig");
 const llvm = llvm_bindings.c;
 
 // Initialize LLVM's native target for the current platform
