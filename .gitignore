@@ -2,20 +2,18 @@
 *
 !*/
 !*.ss
-!*.zig
-!*.zig.zon
+!*.go
+!*.mod
+!*.sum
 !*.md
 !*.txt
 !*.yml
 !.gitignore
-!build.zig
 !LICENSE
 
-# Zig build artifacts
-zig-cache/
-zig-out/
-.zig-out/
-.zig-cache/
+*.gen.go
+simplescript
+simplescript.exe
 
 # IDEs and Editors
 .vscode/
