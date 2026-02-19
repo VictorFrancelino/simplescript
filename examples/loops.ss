@@ -6,7 +6,7 @@ for i in 0..5 {
 }
 
 say('Using variables for range (5 to 9):')
-var start: int = 0
+var start: int = 5
 var end: int = 10
 for i in start..end {
   say('Dynamic index:', i)

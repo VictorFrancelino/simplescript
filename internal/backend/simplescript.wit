@@ -1,0 +1,6 @@
+package simplescript:engine@0.1.0;
+
+world simplescript-world {
+  import print: func(msg: string);
+  export run: func();
+}

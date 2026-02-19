@@ -5,6 +5,7 @@
 !*.go
 !*.mod
 !*.sum
+!*.wit
 !*.md
 !*.txt
 !*.yml

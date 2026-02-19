@@ -1,4 +1,4 @@
-package frontend
+package parser
 
 import (
 	"strconv"
@@ -55,13 +55,11 @@ func (p *Parser) parsePrefix() ast.Expression {
 		return &ast.Identifier{Token: p.curToken, Value: p.curToken.Slice}
 	case ast.TOKEN_INT:
 		val, _ := strconv.ParseInt(p.curToken.Slice, 10, 64)
-
 		return &ast.IntegerLiteral{Token: p.curToken, Value: val}
 	case ast.TOKEN_FLOAT:
 		val, _ := strconv.ParseFloat(p.curToken.Slice, 64)
-
 		return &ast.FloatLiteral{Token: p.curToken, Value: val}
-	case ast.TOKEN_STRING:
+	case ast.TOKEN_STR:
 		return &ast.StringLiteral{Token: p.curToken, Value: p.curToken.Slice}
 	case ast.TOKEN_KW_TRUE, ast.TOKEN_KW_FALSE:
 		return &ast.BooleanLiteral{Token: p.curToken, Value: p.curToken.Tag == ast.TOKEN_KW_TRUE}
@@ -109,11 +107,13 @@ func (p *Parser) parseExpressionList(end ast.TokenType) []ast.Expression {
   }
 
   p.nextToken()
+
   list = append(list, p.ParseExpression(PREC_ASSIGNMENT))
 
   for p.peekTokenIs(ast.TOKEN_COMMA) {
     p.nextToken()
     p.nextToken()
+
     list = append(list, p.ParseExpression(PREC_ASSIGNMENT))
   }
 

@@ -7,7 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"simplescript/internal/frontend"
+	"simplescript/internal/frontend/lexer"
+	"simplescript/internal/frontend/parser"
   "simplescript/internal/backend"
 )
 
@@ -36,7 +37,7 @@ func main() {
 	case 3:
 		filename := args[2]
 
-		if command != "run" && command != "build" {
+		if command != "run" && command != "build" && command != "wasm" {
 			fmt.Printf("Error: Unknown command '%s'\n", command)
 			printUsage()
 			os.Exit(1)
@@ -60,39 +61,45 @@ func processBuildOrRun(command, filename string) {
 		os.Exit(1)
 	}
 
-	stem := strings.TrimSuffix(filepath.Base(filename), ".ss")
-
 	// Frontend
-	lexer := frontend.NewLexer(string(sourceCode))
-	parser := frontend.NewParser(lexer)
-	program, err := parser.Parse()
+	l := lexer.NewLexer(string(sourceCode))
+	p := parser.NewParser(l)
+	program, err := p.Parse()
 	if err != nil {
 		fmt.Printf("Parse Error: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Backend
-	gen := backend.NewGenerator()
-	generatedGoCode, err := gen.Generate(program)
-	if err != nil {
-		fmt.Printf("Generation Error: %v\n", err)
+	comp := backend.NewCompiler()
+	comp.Compile(program)
+	gen := backend.NewGenerator(comp)
+	generatedCode, genErr := gen.Generate(program)
+
+	if genErr != nil {
+		fmt.Printf("Generation Error: %v\n", genErr)
 		os.Exit(1)
 	}
 
-	tempGoFile := stem + ".gen.go"
-	err = os.WriteFile(tempGoFile, []byte(generatedGoCode), 0644)
+	stem := strings.TrimSuffix(filepath.Base(filename), ".ss")
+	tempFile := stem + ".gen.go"
+
+	err = os.WriteFile(tempFile, []byte(generatedCode), 0644)
 	if err != nil {
 		fmt.Printf("Error writing temporary file: %v\n", err)
 		os.Exit(1)
 	}
-	defer os.Remove(tempGoFile)
+	defer os.Remove(tempFile)
 
 	switch command {
 	case "run":
-		runGoCode(tempGoFile)
+		runGoCode(tempFile)
 	case "build":
-		buildGoCode(tempGoFile, stem)
+		buildGoCode(tempFile, stem)
 		fmt.Printf("✓ Build successful: ./%s\n", stem)
+	case "wasm":
+		buildWasmWithTinyGo(tempFile, stem)
+		fmt.Printf("✓ Wasm successful: ./%s.wasm\n", stem)
 	}
 }
 
@@ -118,6 +125,27 @@ func buildGoCode(tempFile, outputName string) {
 	}
 }
 
+func buildWasmWithTinyGo(tempFile, outputName string) {
+	cmd := exec.Command(
+		"tinygo", "build",
+		"-o", outputName+".wasm",
+		"-target", "wasm",
+		"-opt", "z",
+		"-no-debug",
+		"-panic", "trap",
+		"-scheduler", "none",
+		"-gc", "leaking",
+		tempFile,
+	)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		fmt.Printf("TinyGo error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
 func printUsage() {
 	fmt.Println("SimpleScript CLI")
 	fmt.Println("Usage: simplescript <command> <file.ss>")
@@ -127,4 +155,5 @@ func printUsage() {
 	fmt.Println("\nCommands:")
 	fmt.Println("  build <file.ss> - Compile to a native executable (via Go)")
 	fmt.Println("  run   <file.ss> - Transpile and execute immediately")
+	fmt.Println("  wasm  <file.ss> - Compile to WebAssembly (via TinyGo)")
 }

@@ -1,15 +1,16 @@
-package frontend
+package parser
 
 import "simplescript/internal/ast"
+import "simplescript/internal/frontend/lexer"
 
 type Parser struct {
-	lexer *Lexer
+	lexer *lexer.Lexer
 	curToken ast.Token
   peekToken ast.Token
   erros []string
 }
 
-func NewParser(l *Lexer) *Parser {
+func NewParser(l *lexer.Lexer) *Parser {
 	p := &Parser{lexer: l}
   p.nextToken()
   p.nextToken()

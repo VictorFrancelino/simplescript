@@ -1,4 +1,4 @@
-package frontend
+package parser
 
 import "simplescript/internal/ast"
 
@@ -17,14 +17,24 @@ func (p *Parser) parseStatement() ast.Statement {
 	}
 }
 
-func (p *Parser) parseSay() ast.Statement {
-	stmt := &ast.SayStmt{Token: p.curToken}
+func (p *Parser) parseVarDecl(isConst bool) ast.Statement {
+  stmt := &ast.VarDecl{Token: p.curToken, IsConst: isConst}
 
-	if !p.expectPeek(ast.TOKEN_LPAREN) { return nil }
+  if !p.expectPeek(ast.TOKEN_IDENTIFIER) { return nil }
 
-	stmt.Args = p.parseExpressionList(ast.TOKEN_RPAREN)
+  stmt.Name = p.curToken.Slice
 
-	return stmt
+  if p.peekTokenIs(ast.TOKEN_COLON) {
+    p.nextToken()
+    p.nextToken()
+    stmt.DataType = p.curToken.Slice
+  }
+
+  if !p.expectPeek(ast.TOKEN_EQUALS) { return nil }
+  p.nextToken()
+  stmt.Value = p.ParseExpression(PREC_ASSIGNMENT)
+
+  return stmt
 }
 
 func (p *Parser) parseAssignment(name string) ast.Statement {
@@ -50,24 +60,14 @@ func (p *Parser) parseAssignment(name string) ast.Statement {
   return stmt
 }
 
-func (p *Parser) parseVarDecl(isConst bool) ast.Statement {
-  stmt := &ast.VarDecl{Token: p.curToken, IsConst: isConst}
+func (p *Parser) parseSay() ast.Statement {
+	stmt := &ast.SayStmt{Token: p.curToken}
 
-  if !p.expectPeek(ast.TOKEN_IDENTIFIER) { return nil }
+	if !p.expectPeek(ast.TOKEN_LPAREN) { return nil }
 
-  stmt.Name = p.curToken.Slice
+	stmt.Args = p.parseExpressionList(ast.TOKEN_RPAREN)
 
-  if p.peekTokenIs(ast.TOKEN_COLON) {
-    p.nextToken()
-    if !p.expectPeek(ast.TOKEN_IDENTIFIER) { return nil }
-    stmt.DataType = p.curToken.Slice
-  }
-
-  if !p.expectPeek(ast.TOKEN_EQUALS) { return nil }
-  p.nextToken()
-  stmt.Value = p.ParseExpression(PREC_ASSIGNMENT)
-
-  return stmt
+	return stmt
 }
 
 func (p *Parser) parseBlock() *ast.Block {
