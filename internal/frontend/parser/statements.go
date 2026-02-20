@@ -43,10 +43,14 @@ func (p *Parser) parseVarDecl(isConst bool) ast.Statement {
 func (p *Parser) parseAssignment(name string) ast.Statement {
   stmt := &ast.Assignment{Token: p.curToken, Targets: []string{name}}
 
-  for p.expectPeek(ast.TOKEN_COMMA) {
-  	if p.expectPeek(ast.TOKEN_IDENTIFIER) {
-   		stmt.Targets = append(stmt.Targets, p.curToken.Slice)
+  for p.peekTokenIs(ast.TOKEN_COMMA) {
+  	p.nextToken()
+
+  	if !p.expectPeek(ast.TOKEN_IDENTIFIER) {
+   		return nil
    	}
+
+   	stmt.Targets = append(stmt.Targets, p.curToken.Slice)
   }
 
   if !p.expectPeek(ast.TOKEN_EQUALS) { return nil }
@@ -55,8 +59,10 @@ func (p *Parser) parseAssignment(name string) ast.Statement {
 
   stmt.Values = append(stmt.Values, p.ParseExpression(PREC_ASSIGNMENT))
 
-  for p.expectPeek(ast.TOKEN_COMMA) {
+  for p.peekTokenIs(ast.TOKEN_COMMA) {
     p.nextToken()
+    p.nextToken()
+
     stmt.Values = append(stmt.Values, p.ParseExpression(PREC_ASSIGNMENT))
   }
 

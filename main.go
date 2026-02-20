@@ -64,8 +64,11 @@ func processBuildOrRun(command, filename string) {
 
 	// Frontend
 	lex := lexer.NewLexer(string(sourceCode))
-	par := parser.NewParser(lex)
+	tokens := lex.Tokenize()
+
+	par := parser.NewParser(tokens)
 	program, err := par.Parse()
+
 	if len(par.Errors()) > 0 {
 		fmt.Println("Syntax Erros found:")
 

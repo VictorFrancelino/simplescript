@@ -4,24 +4,26 @@ import (
 	"fmt"
 
 	"simplescript/internal/ast"
-	"simplescript/internal/frontend/lexer"
 )
 
 type Parser struct {
-	lexer *lexer.Lexer
+	tokens []ast.Token
+	pos int
 	curToken ast.Token
   peekToken ast.Token
   errors []string
 }
 
-func NewParser(l *lexer.Lexer) *Parser {
+func NewParser(tokens []ast.Token) *Parser {
 	p := &Parser{
-		lexer: l,
+		tokens: tokens,
+		pos: 0,
 		errors: []string{},
 	}
 
   p.nextToken()
   p.nextToken()
+
   return p
 }
 
@@ -31,7 +33,13 @@ func (p *Parser) Errors() []string {
 
 func (p *Parser) nextToken() {
 	p.curToken = p.peekToken
-	p.peekToken = p.lexer.Next()
+
+	if p.pos < len(p.tokens) {
+		p.peekToken = p.tokens[p.pos]
+		p.pos++
+	} else {
+		p.peekToken = p.tokens[len(p.tokens)-1]
+	}
 }
 
 func (p *Parser) Parse() (*ast.Program, error) {

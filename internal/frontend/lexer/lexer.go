@@ -8,7 +8,6 @@ type Lexer struct {
 	pos int
 	line int
 	col int
-	peekedToken *ast.Token
 }
 
 // initializes Lexer with the source code.
@@ -16,28 +15,20 @@ func NewLexer(buffer string) *Lexer {
 	return &Lexer{ buffer: buffer, line: 1, col: 1, }
 }
 
-// returns the next token and advances the cursor
-func (l *Lexer) Next() ast.Token {
-	if l.peekedToken != nil {
-		tok := *l.peekedToken
-		l.peekedToken = nil
+// Tokenize reads the entire buffer and returns all tokens at once
+func (l *Lexer) Tokenize() []ast.Token {
+	var tokens []ast.Token
 
-		return tok
+	for {
+		tok := l.scanToken()
+		tokens = append(tokens, tok)
+
+		if tok.Tag == ast.TOKEN_EOF {
+			break
+		}
 	}
 
-	return l.scanToken()
-}
-
-// allows you to view the next token without consuming it
-func (l *Lexer) Peek() ast.Token {
-	if l.peekedToken != nil {
-		return *l.peekedToken
-	}
-
-	tok := l.scanToken()
-	l.peekedToken = &tok
-
-	return tok
+	return tokens
 }
 
 // master function that identifies which token is next in the buffer
