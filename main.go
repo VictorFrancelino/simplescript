@@ -9,6 +9,7 @@ import (
 
 	"simplescript/internal/frontend/lexer"
 	"simplescript/internal/frontend/parser"
+	"simplescript/internal/analyzer"
   "simplescript/internal/backend"
 )
 
@@ -62,13 +63,25 @@ func processBuildOrRun(command, filename string) {
 	}
 
 	// Frontend
-	l := lexer.NewLexer(string(sourceCode))
-	p := parser.NewParser(l)
-	program, err := p.Parse()
-	if len(p.Errors()) > 0 {
+	lex := lexer.NewLexer(string(sourceCode))
+	par := parser.NewParser(lex)
+	program, err := par.Parse()
+	if len(par.Errors()) > 0 {
 		fmt.Println("Syntax Erros found:")
 
-		for _, msg := range p.Errors() {
+		for _, msg := range par.Errors() {
+			fmt.Printf(" - %s\n", msg)
+		}
+
+		os.Exit(1)
+	}
+
+	ana := analyzer.NewAnalyzer()
+	err = ana.Analyze(program)
+	if err != nil {
+		fmt.Println("Semantic Errors found:")
+
+		for _, msg := range ana.Errors() {
 			fmt.Printf(" - %s\n", msg)
 		}
 
