@@ -53,13 +53,20 @@ func (l *Lexer) peekChar(offset int) byte {
 	return 0
 }
 
-// skips spaces, tabs, and line breaks
+// skips spaces, tabs, line breaks, and single-line comments
 func (l *Lexer) skipWhitespace() {
 	for l.pos < len(l.buffer) {
 		char := l.peekChar(0)
 
 		if char == ' ' || char == '\t' || char == '\r' || char == '\n' {
 			l.advance()
+		} else if char == '/' && l.peekChar(1) == '/' {
+			l.advance()
+			l.advance()
+
+			for l.pos < len(l.buffer) && l.peekChar(0) != '\n' {
+				l.advance()
+			}
 		} else {
 			break
 		}

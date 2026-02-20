@@ -26,12 +26,12 @@ const (
 )
 
 func (e ErrorCode) String() string {
-	return [...]string{
+	names := [...]string{
 		"SyntaxError",
 		"TypeError",
 		"NameError",
 		"LinkerError",
-		"InternalError"
+		"InternalError",
 	}
 	if e < 0 || int(e) >= len(names) {
 		return "UnknownError"
@@ -49,7 +49,7 @@ const (
 )
 
 func (d DataType) String() string {
-	return [...]string{"int", "float", "str", "bool"}
+	names := [...]string{"int", "float", "str", "bool"}
 	if d < 0 || int(d) >= len(names) {
 		return "unknown"
 	}
@@ -181,7 +181,7 @@ func (c *Compiler) Report(
 		reset,
 		token.Line,
 		token.Col,
-		message
+		message,
 	)
 
 	if extra != "" {

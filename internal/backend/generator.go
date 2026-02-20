@@ -105,7 +105,7 @@ func (g *Generator) genStatement(stmt ast.Statement, indent int) {
       start,
       s.Iterator,
       end,
-      s.Iterator
+      s.Iterator,
 		))
 
 		g.genStatement(s.Body, indent + 1)

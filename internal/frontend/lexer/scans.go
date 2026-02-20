@@ -22,11 +22,12 @@ func (l *Lexer) scanString(delimiter byte, line, col int) ast.Token {
 		l.advance()
 	}
 
-	content := l.buffer[start:l.pos]
-
-	if l.pos < len(l.buffer) {
-		l.advance()
+	if l.pos >= len(l.buffer) {
+		return l.newToken(ast.TOKEN_INVALID, "Unterminated string", line, col)
 	}
+
+	content := l.buffer[start:l.pos]
+	l.advance()
 
 	return l.newToken(ast.TOKEN_STR, content, line, col)
 }

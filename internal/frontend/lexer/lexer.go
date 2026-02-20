@@ -67,21 +67,14 @@ func (l *Lexer) scanToken() ast.Token {
 	case ')': return l.newToken(ast.TOKEN_RPAREN, ")", startLine, startCol)
 	case '{': return l.newToken(ast.TOKEN_LBRACE, "{", startLine, startCol)
 	case '}': return l.newToken(ast.TOKEN_RBRACE, "}", startLine, startCol)
+	case '[': return l.newToken(ast.TOKEN_LBRACKET, "[", startLine, startCol)
+	case ']': return l.newToken(ast.TOKEN_RBRACKET, "]", startLine, startCol)
 	case '+': return l.newToken(ast.TOKEN_PLUS, "+", startLine, startCol)
 	case '-': return l.newToken(ast.TOKEN_MINUS, "-", startLine, startCol)
 	case '*': return l.newToken(ast.TOKEN_ASTERISK, "*", startLine, startCol)
 	case ':': return l.newToken(ast.TOKEN_COLON, ":", startLine, startCol)
 	case ',': return l.newToken(ast.TOKEN_COMMA, ",", startLine, startCol)
-	case '/':
-		if l.match('/') {
-			for l.pos < len(l.buffer) && l.peekChar(0) != '\n' {
-				l.advance()
-			}
-
-			return l.scanToken()
-		}
-
-		return l.newToken(ast.TOKEN_SLASH, "/", startLine, startCol)
+	case '/': return l.newToken(ast.TOKEN_SLASH, "/", startLine, startCol)
 	case '=':
 		if l.match('=') {
 			return l.newToken(ast.TOKEN_EQUAL_EQUAL, "==", startLine, startCol)
@@ -111,7 +104,7 @@ func (l *Lexer) scanToken() ast.Token {
 			return l.newToken(ast.TOKEN_RANGE, "..", startLine, startCol)
 		}
 
-		return l.newToken(ast.TOKEN_INVALID, ".", startLine, startCol)
+		return l.newToken(ast.TOKEN_DOT, ".", startLine, startCol)
 	case '"', '\'':
 		return l.scanString(char, startLine, startCol)
 	}
