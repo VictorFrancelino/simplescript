@@ -74,8 +74,8 @@ func (p *Parser) parsePrefix() ast.Expression {
 
 		expr := p.ParseExpression(PREC_NONE)
 
-		if p.peekToken.Tag == ast.TOKEN_RPAREN {
-			p.nextToken()
+		if !p.expectPeek(ast.TOKEN_RPAREN) {
+			return nil
 		}
 
 		return expr

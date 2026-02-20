@@ -9,6 +9,9 @@ func (p *Parser) parseStatement() ast.Statement {
 	case ast.TOKEN_KW_IF: return p.parseIf()
 	case ast.TOKEN_KW_FOR: return p.parseFor()
 	case ast.TOKEN_LBRACE: return p.parseBlock()
+	case ast.TOKEN_KW_RETURN: return p.parseReturn()
+	case ast.TOKEN_KW_BREAK: return p.parseBreak()
+	case ast.TOKEN_KW_CONTINUE: return p.parseContinue()
 	case ast.TOKEN_IDENTIFIER:
 		if p.curToken.Slice == "say" { return p.parseSay() }
 
@@ -97,10 +100,15 @@ func (p *Parser) parseIf() ast.Statement {
 
   stmt.Consequence = p.parseBlock()
 
-  if p.expectPeek(ast.TOKEN_KW_ELSE) {
-    if p.expectPeek(ast.TOKEN_KW_IF) {
+  if p.peekTokenIs(ast.TOKEN_KW_ELSE) {
+  	p.nextToken()
+
+    if p.peekTokenIs(ast.TOKEN_KW_IF) {
+    	p.nextToken()
       stmt.Alternative = p.parseIf()
-    } else if p.expectPeek(ast.TOKEN_LBRACE) {
+    } else {
+    	if !p.expectPeek(ast.TOKEN_LBRACE) { return nil }
+
       stmt.Alternative = p.parseBlock()
     }
   }
@@ -132,4 +140,22 @@ func (p *Parser) parseFor() *ast.ForStmt {
 	stmt.Body = p.parseBlock()
 
 	return stmt
+}
+
+func (p *Parser) parseReturn() ast.Statement {
+	stmt := &ast.ReturnStmt{Token: p.curToken}
+
+	p.nextToken()
+
+	stmt.ReturnValue = p.ParseExpression(PREC_NONE)
+
+	return stmt
+}
+
+func (p *Parser) parseBreak() ast.Statement {
+	return &ast.BreakStmt{Token: p.curToken}
+}
+
+func (p *Parser) parseContinue() ast.Statement {
+	return &ast.ContinueStmt{Token: p.curToken}
 }

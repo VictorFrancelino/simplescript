@@ -1,20 +1,32 @@
 package parser
 
-import "simplescript/internal/ast"
-import "simplescript/internal/frontend/lexer"
+import (
+	"fmt"
+
+	"simplescript/internal/ast"
+	"simplescript/internal/frontend/lexer"
+)
 
 type Parser struct {
 	lexer *lexer.Lexer
 	curToken ast.Token
   peekToken ast.Token
-  erros []string
+  errors []string
 }
 
 func NewParser(l *lexer.Lexer) *Parser {
-	p := &Parser{lexer: l}
+	p := &Parser{
+		lexer: l,
+		errors: []string{},
+	}
+
   p.nextToken()
   p.nextToken()
   return p
+}
+
+func (p *Parser) Errors() []string {
+	return p.errors
 }
 
 func (p *Parser) nextToken() {
@@ -44,11 +56,24 @@ func (p *Parser) peekTokenIs(t ast.TokenType) bool {
 	return p.peekToken.Tag == t
 }
 
+func (p *Parser) peekError(t ast.TokenType) {
+	msg := fmt.Sprintf(
+		"expected next token to be %v, got %v instead at line %d, col %d",
+		t,
+		p.peekToken.Tag,
+		p.peekToken.Line,
+		p.peekToken.Col,
+	)
+
+	p.errors = append(p.errors, msg)
+}
+
 func (p *Parser) expectPeek(t ast.TokenType) bool {
   if p.peekTokenIs(t) {
     p.nextToken()
     return true
   }
 
+  p.peekError(t)
   return false
 }

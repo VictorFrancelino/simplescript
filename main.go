@@ -65,8 +65,13 @@ func processBuildOrRun(command, filename string) {
 	l := lexer.NewLexer(string(sourceCode))
 	p := parser.NewParser(l)
 	program, err := p.Parse()
-	if err != nil {
-		fmt.Printf("Parse Error: %v\n", err)
+	if len(p.Errors()) > 0 {
+		fmt.Println("Syntax Erros found:")
+
+		for _, msg := range p.Errors() {
+			fmt.Printf(" - %s\n", msg)
+		}
+
 		os.Exit(1)
 	}
 

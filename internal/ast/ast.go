@@ -111,6 +111,19 @@ type ForStmt struct {
 	Body *Block
 }
 
+type ReturnStmt struct {
+	Token Token
+	ReturnValue Expression
+}
+
+type BreakStmt struct {
+	Token Token
+}
+
+type ContinueStmt struct {
+	Token Token
+}
+
 type Block struct {
 	Token Token
 	Statements []Statement
@@ -159,3 +172,6 @@ func (s *SayStmt) statementNode() {}
 func (i *IfStmt) statementNode() {}
 func (f *ForStmt) statementNode() {}
 func (b *Block) statementNode() {}
+func (r *ReturnStmt) statementNode() {}
+func (b *BreakStmt) statementNode() {}
+func (c *ContinueStmt) statementNode() {}
