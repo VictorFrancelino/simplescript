@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"fmt"
+
 	"simplescript/internal/ast"
 )
 
@@ -17,16 +18,6 @@ func NewAnalyzer() *Analyzer {
 	}
 }
 
-func (a *Analyzer) Errors() []string {
-	return a.errors
-}
-
-func (a *Analyzer) reportError(token ast.Token, format string, args ...interface{}) {
-	msg := fmt.Sprintf(format, args...)
-	fullMsg := fmt.Sprintf("Semantic Error at line %d, col %d: %s", token.Line, token.Col, msg)
-	a.errors = append(a.errors, fullMsg)
-}
-
 func (a *Analyzer) Analyze(prog *ast.Program) error {
 	for _, stmt := range prog.Statements {
 		a.analyzeStatement(stmt)
@@ -37,6 +28,16 @@ func (a *Analyzer) Analyze(prog *ast.Program) error {
 	}
 
 	return nil
+}
+
+func (a *Analyzer) Errors() []string {
+	return a.errors
+}
+
+func (a *Analyzer) reportError(token ast.Token, format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	fullMsg := fmt.Sprintf("Semantic Error at line %d, col %d: %s", token.Line, token.Col, msg)
+	a.errors = append(a.errors, fullMsg)
 }
 
 func (a *Analyzer) analyzeStatement(stmt ast.Statement) {
