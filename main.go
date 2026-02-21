@@ -67,7 +67,7 @@ func processBuildOrRun(command, filename string) {
 	tokens := lex.Tokenize()
 
 	par := parser.NewParser(tokens)
-	program, err := par.Parse()
+	program := par.Parse()
 
 	if len(par.Errors()) > 0 {
 		fmt.Println("Syntax Erros found:")

@@ -1,7 +1,9 @@
 package parser
 
 import (
+	"fmt"
 	"strconv"
+
 	"simplescript/internal/ast"
 )
 
@@ -40,9 +42,12 @@ func (p *Parser) getPrecedence(t ast.TokenType) int {
 
 func (p *Parser) ParseExpression(precedence int) ast.Expression {
 	left := p.parsePrefix()
+	if left == nil {
+		return nil
+	}
 
-	for precedence < p.getPrecedence(p.peekToken.Tag) {
-		p.nextToken()
+	for precedence < p.getPrecedence(p.current().Tag) {
+		p.advance()
 		left = p.parseInfix(left)
 	}
 
@@ -50,49 +55,50 @@ func (p *Parser) ParseExpression(precedence int) ast.Expression {
 }
 
 func (p *Parser) parsePrefix() ast.Expression {
-	switch p.curToken.Tag {
-	case ast.TOKEN_IDENTIFIER:
-		return &ast.Identifier{Token: p.curToken, Value: p.curToken.Slice}
+	token := p.advance()
+
+	switch token.Tag {
+	case ast.TOKEN_IDENTIFIER: return &ast.Identifier{Token: token, Value: token.Slice}
 	case ast.TOKEN_INT:
-		val, _ := strconv.ParseInt(p.curToken.Slice, 10, 64)
-		return &ast.IntegerLiteral{Token: p.curToken, Value: val}
+		val, _ := strconv.ParseInt(token.Slice, 10, 64)
+		return &ast.IntegerLiteral{Token: token, Value: val}
 	case ast.TOKEN_FLOAT:
-		val, _ := strconv.ParseFloat(p.curToken.Slice, 64)
-		return &ast.FloatLiteral{Token: p.curToken, Value: val}
-	case ast.TOKEN_STR:
-		return &ast.StringLiteral{Token: p.curToken, Value: p.curToken.Slice}
-	case ast.TOKEN_KW_TRUE, ast.TOKEN_KW_FALSE:
-		return &ast.BooleanLiteral{Token: p.curToken, Value: p.curToken.Tag == ast.TOKEN_KW_TRUE}
+		val, _ := strconv.ParseFloat(token.Slice, 64)
+		return &ast.FloatLiteral{Token: token, Value: val}
+	case ast.TOKEN_STR: return &ast.StringLiteral{Token: token, Value: token.Slice}
+	case ast.TOKEN_KW_TRUE, ast.TOKEN_KW_FALSE: return &ast.BooleanLiteral{Token: token, Value: token.Tag == ast.TOKEN_KW_TRUE}
 	case ast.TOKEN_MINUS:
-		op := p.curToken.Slice
-
-		p.nextToken()
-
-		return &ast.PrefixExpression{Operator: op, Right: p.ParseExpression(PREC_UNARY)}
+		right := p.ParseExpression(PREC_UNARY)
+		return &ast.PrefixExpression{Operator: token.Slice, Right: right}
 	case ast.TOKEN_LPAREN:
-		p.nextToken()
-
 		expr := p.ParseExpression(PREC_NONE)
 
-		if !p.expectPeek(ast.TOKEN_RPAREN) {
+		if p.consume(ast.TOKEN_RPAREN, "expected ')' after expression").Tag == ast.TOKEN_INVALID {
 			return nil
 		}
 
 		return expr
-	default: return nil
+	default:
+		msg := fmt.Sprintf(
+			"Syntax Error at line %d, col %d: unexpected token '%s'",
+			token.Line,
+			token.Col,
+			token.Slice,
+		)
+		p.errors = append(p.errors, msg)
+		return nil
 	}
 }
 
 func (p *Parser) parseInfix(left ast.Expression) ast.Expression {
+	opToken := p.previous()
+
 	expr := &ast.InfixExpression{
 		Left: left,
-		Operator: p.curToken.Slice,
+		Operator: opToken.Slice,
 	}
 
-	precedence := p.getPrecedence(p.curToken.Tag)
-
-	p.nextToken()
-
+	precedence := p.getPrecedence(opToken.Tag)
 	expr.Right = p.ParseExpression(precedence)
 
 	return expr
@@ -101,23 +107,20 @@ func (p *Parser) parseInfix(left ast.Expression) ast.Expression {
 func (p *Parser) parseExpressionList(end ast.TokenType) []ast.Expression {
   list := []ast.Expression{}
 
-  if p.peekTokenIs(end) {
-    p.nextToken()
+  if p.check(end) {
+    p.advance()
     return list
   }
 
-  p.nextToken()
-
   list = append(list, p.ParseExpression(PREC_ASSIGNMENT))
 
-  for p.peekTokenIs(ast.TOKEN_COMMA) {
-    p.nextToken()
-    p.nextToken()
-
+  for p.match(ast.TOKEN_COMMA) {
     list = append(list, p.ParseExpression(PREC_ASSIGNMENT))
   }
 
-  if !p.expectPeek(end) { return nil }
+  if p.consume(end, "expected closing delimiter").Tag == ast.TOKEN_INVALID {
+  	return nil
+  }
 
   return list
 }

@@ -9,79 +9,90 @@ import (
 type Parser struct {
 	tokens []ast.Token
 	pos int
-	curToken ast.Token
-  peekToken ast.Token
   errors []string
 }
 
 func NewParser(tokens []ast.Token) *Parser {
-	p := &Parser{
+	return &Parser{
 		tokens: tokens,
 		pos: 0,
 		errors: []string{},
 	}
+}
 
-  p.nextToken()
-  p.nextToken()
+func (p *Parser) Parse() *ast.Program {
+	prog := &ast.Program{}
 
-  return p
+	for !p.isAtEnd() {
+		stmt := p.parseStatement()
+
+		if stmt != nil {
+			prog.Statements = append(prog.Statements, stmt)
+		} else {
+			p.advance()
+		}
+	}
+
+	return prog
 }
 
 func (p *Parser) Errors() []string {
 	return p.errors
 }
 
-func (p *Parser) nextToken() {
-	p.curToken = p.peekToken
+func (p *Parser) current() ast.Token {
+	if p.pos >= len(p.tokens) {
+		return p.tokens[len(p.tokens)-1]
+	}
 
-	if p.pos < len(p.tokens) {
-		p.peekToken = p.tokens[p.pos]
+	return p.tokens[p.pos]
+}
+
+func (p *Parser) previous() ast.Token {
+	return p.tokens[p.pos-1]
+}
+
+func (p *Parser) isAtEnd() bool {
+	return p.current().Tag == ast.TOKEN_EOF
+}
+
+func (p *Parser) check(t ast.TokenType) bool {
+	if p.isAtEnd() { return false }
+	return p.current().Tag == t
+}
+
+func (p *Parser) advance() ast.Token {
+	if p.current().Tag != ast.TOKEN_EOF {
 		p.pos++
-	} else {
-		p.peekToken = p.tokens[len(p.tokens)-1]
 	}
+
+	return p.previous()
 }
 
-func (p *Parser) Parse() (*ast.Program, error) {
-	prog := &ast.Program{}
-
-	for !p.curTokenIs(ast.TOKEN_EOF) {
-		if stmt := p.parseStatement(); stmt != nil {
-			prog.Statements = append(prog.Statements, stmt)
+func (p *Parser) match(types ...ast.TokenType) bool {
+	for _, t := range types {
+		if p.check(t) {
+			p.advance()
+			return true
 		}
-
-		p.nextToken()
 	}
 
-	return prog, nil
+	return false
 }
 
-func (p *Parser) curTokenIs(t ast.TokenType) bool {
-	return p.curToken.Tag == t
-}
+func (p *Parser) consume(t ast.TokenType, errMsg string) ast.Token {
+	if p.check(t) {
+		return p.advance()
+	}
 
-func (p *Parser) peekTokenIs(t ast.TokenType) bool {
-	return p.peekToken.Tag == t
-}
-
-func (p *Parser) peekError(t ast.TokenType) {
 	msg := fmt.Sprintf(
-		"expected next token to be %v, got %v instead at line %d, col %d",
-		t,
-		p.peekToken.Tag,
-		p.peekToken.Line,
-		p.peekToken.Col,
+		"Syntax Error at line %d, col %d: %s. Got '%s' instead.",
+		p.current().Line,
+		p.current().Col,
+		errMsg,
+		p.current().Slice,
 	)
-
 	p.errors = append(p.errors, msg)
-}
 
-func (p *Parser) expectPeek(t ast.TokenType) bool {
-  if p.peekTokenIs(t) {
-    p.nextToken()
-    return true
-  }
-
-  p.peekError(t)
-  return false
+	return ast.Token{Tag: ast.TOKEN_INVALID}
 }
