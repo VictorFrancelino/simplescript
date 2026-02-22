@@ -1,6 +1,11 @@
 package lexer
 
-import "simplescript/internal/ast"
+import (
+	"fmt"
+	"os"
+
+	"simplescript/internal/ast"
+)
 
 // it transforms the source code into a sequence of logical units (Tokens)
 type Lexer struct {
@@ -15,8 +20,27 @@ func NewLexer(buffer string) *Lexer {
 	return &Lexer{ buffer: buffer, line: 1, col: 1, }
 }
 
-// Tokenize reads the entire buffer and returns all tokens at once
-func (l *Lexer) Tokenize() []ast.Token {
+func MustTokenize(source string) []ast.Token {
+	l := NewLexer(source)
+	tokens := l.tokenize()
+
+	for _, token := range tokens {
+		if token.Tag == ast.TOKEN_INVALID {
+			fmt.Printf(
+				"Lexical Error [%d:%d]: invalid token '%s'\n",
+				token.Line,
+				token.Col,
+				token.Slice,
+			)
+			os.Exit(1)
+		}
+	}
+
+	return tokens
+}
+
+// reads the entire buffer and returns all tokens at once
+func (l *Lexer) tokenize() []ast.Token {
 	var tokens []ast.Token
 
 	for {

@@ -3,6 +3,7 @@ package backend
 import (
 	"fmt"
 	"os"
+
 	"simplescript/internal/ast"
 )
 
@@ -74,7 +75,13 @@ func NewCompiler() *Compiler {
 	}
 }
 
-func (c *Compiler) Compile(prog *ast.Program) {
+func MustCompile(prog *ast.Program) *Compiler {
+	c := NewCompiler()
+	c.compile(prog)
+	return c
+}
+
+func (c *Compiler) compile(prog *ast.Program) {
 	for _, stmt := range prog.Statements {
 		c.processStatement(stmt)
 	}

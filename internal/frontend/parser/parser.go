@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"os"
 
 	"simplescript/internal/ast"
 )
@@ -20,7 +21,22 @@ func NewParser(tokens []ast.Token) *Parser {
 	}
 }
 
-func (p *Parser) Parse() *ast.Program {
+func MustParse(tokens []ast.Token) *ast.Program {
+	p := NewParser(tokens)
+	program := p.parse()
+
+	if len(p.errors) > 0 {
+		fmt.Println("Syntax Errors found:")
+		for _, msg := range p.errors {
+			fmt.Printf(" - %s\n", msg)
+		}
+		os.Exit(1)
+	}
+
+	return program
+}
+
+func (p *Parser) parse() *ast.Program {
 	prog := &ast.Program{}
 
 	for !p.isAtEnd() {
@@ -34,10 +50,6 @@ func (p *Parser) Parse() *ast.Program {
 	}
 
 	return prog
-}
-
-func (p *Parser) Errors() []string {
-	return p.errors
 }
 
 func (p *Parser) current() ast.Token {
