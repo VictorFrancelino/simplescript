@@ -40,9 +40,7 @@ func (p *Parser) parse() *ast.Program {
 	prog := &ast.Program{}
 
 	for !p.isAtEnd() {
-		stmt := p.parseStatement()
-
-		if stmt != nil {
+		if stmt := p.parseStatement(); stmt != nil {
 			prog.Statements = append(prog.Statements, stmt)
 		} else {
 			p.advance()
@@ -50,6 +48,18 @@ func (p *Parser) parse() *ast.Program {
 	}
 
 	return prog
+}
+
+func (p *Parser) addError(msg string) {
+	cur := p.current()
+	err := fmt.Sprintf(
+		"Syntax Error at line %d, col %d: %s. Got '%s' instead.",
+		cur.Line,
+		cur.Col,
+		msg,
+		cur.Slice,
+	)
+	p.errors = append(p.errors, err)
 }
 
 func (p *Parser) current() ast.Token {
@@ -74,7 +84,7 @@ func (p *Parser) check(t ast.TokenType) bool {
 }
 
 func (p *Parser) advance() ast.Token {
-	if p.current().Tag != ast.TOKEN_EOF {
+	if !p.isAtEnd() {
 		p.pos++
 	}
 
@@ -97,14 +107,7 @@ func (p *Parser) consume(t ast.TokenType, errMsg string) ast.Token {
 		return p.advance()
 	}
 
-	msg := fmt.Sprintf(
-		"Syntax Error at line %d, col %d: %s. Got '%s' instead.",
-		p.current().Line,
-		p.current().Col,
-		errMsg,
-		p.current().Slice,
-	)
-	p.errors = append(p.errors, msg)
+	p.addError(errMsg)
 
 	return ast.Token{Tag: ast.TOKEN_INVALID}
 }

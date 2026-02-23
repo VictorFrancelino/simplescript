@@ -1,10 +1,6 @@
 package parser
 
-import (
-	"fmt"
-
-	"simplescript/internal/ast"
-)
+import "simplescript/internal/ast"
 
 func (p *Parser) parseStatement() ast.Statement {
 	token := p.advance()
@@ -19,98 +15,116 @@ func (p *Parser) parseStatement() ast.Statement {
 	case ast.TOKEN_KW_BREAK: return p.parseBreak()
 	case ast.TOKEN_KW_CONTINUE: return p.parseContinue()
 	case ast.TOKEN_IDENTIFIER:
-		if token.Slice == "say" { return p.parseSay() }
+		if token.Slice == "say" {
+			return p.parseSay()
+		}
+
 		return p.parseAssignment(token.Slice)
 	default:
-		msg := fmt.Sprintf(
-			"Syntax Error at line %d, col %d: unexpected token '%s'",
-			token.Line,
-			token.Col,
-			token.Slice,
-		)
-		p.errors = append(p.errors, msg)
+		p.addError("unexpected token in statement")
 		return nil
 	}
 }
 
 func (p *Parser) parseVarDecl(isConst bool) ast.Statement {
-  stmt := &ast.VarDecl{Token: p.previous(), IsConst: isConst}
+	token := p.previous()
 
-  nameToken := p.consume(ast.TOKEN_IDENTIFIER, "expected variable name")
-  if nameToken.Tag == ast.TOKEN_INVALID {
-  	return nil
-  }
-  stmt.Name = nameToken.Slice
+  name := p.consume(ast.TOKEN_IDENTIFIER, "expected variable name")
+  if name.Tag == ast.TOKEN_INVALID { return nil }
 
+  dataType := ""
   if p.match(ast.TOKEN_COLON) {
-    typeToken := p.advance()
+  	dt := p.advance()
 
-    if typeToken.Tag == ast.TOKEN_EQUALS || typeToken.Tag == ast.TOKEN_EOF {
-    	msg := fmt.Sprintf(
-     		"Syntax Error at line %d, col %d: expected type after ':'",
-      	typeToken.Line,
-      	typeToken.Col,
-     	)
-     	p.errors = append(p.errors, msg)
+    if dt.Tag == ast.TOKEN_EQUALS || dt.Tag == ast.TOKEN_EOF {
+    	p.addError("expected type after ':'")
     	return nil
     }
 
-    stmt.DataType = typeToken.Slice
+    dataType = dt.Slice
   }
 
   if p.consume(ast.TOKEN_EQUALS, "expected '=' in variable declaration").Tag == ast.TOKEN_INVALID {
   	return nil
   }
 
-  stmt.Value = p.ParseExpression(PREC_ASSIGNMENT)
+  value := p.ParseExpression()
 
-  return stmt
+  return &ast.VarDecl{
+		Token: token,
+		Name: name.Slice,
+		DataType: dataType,
+		IsConst: isConst,
+		Value: value,
+	}
 }
 
-func (p *Parser) parseAssignment(name string) ast.Statement {
-  stmt := &ast.Assignment{Token: p.previous(), Targets: []string{name}}
+func (p *Parser) parseAssignment(firstName string) ast.Statement {
+	token := p.previous()
+	targets := []string{firstName}
 
   for p.match(ast.TOKEN_COMMA) {
-  	targetToken := p.consume(ast.TOKEN_IDENTIFIER, "expected variable name after ','")
+  	target := p.consume(ast.TOKEN_IDENTIFIER, "expected variable name after ','")
 
-  	if targetToken.Tag == ast.TOKEN_INVALID {
+  	if target.Tag == ast.TOKEN_INVALID {
    		return nil
    	}
 
-   	stmt.Targets = append(stmt.Targets, targetToken.Slice)
+   	targets = append(targets, target.Slice)
   }
 
   if p.consume(ast.TOKEN_EQUALS, "expected '=' in assignment").Tag == ast.TOKEN_INVALID {
 		return nil
 	}
 
-  stmt.Values = append(stmt.Values, p.ParseExpression(PREC_ASSIGNMENT))
+	values := []ast.Expression{}
+  for {
+    values = append(values, p.ParseExpression())
 
-  for p.match(ast.TOKEN_COMMA) {
-    stmt.Values = append(stmt.Values, p.ParseExpression(PREC_ASSIGNMENT))
+    if !p.match(ast.TOKEN_COMMA) {
+    	break
+    }
   }
 
-  return stmt
+  return &ast.Assignment{
+		Token: token,
+		Targets: targets,
+		Values: values,
+	}
 }
 
 func (p *Parser) parseSay() ast.Statement {
-	stmt := &ast.SayStmt{Token: p.previous()}
+	token := p.previous()
 
 	if p.consume(ast.TOKEN_LPAREN, "expected '(' after 'say'").Tag == ast.TOKEN_INVALID {
 		return nil
 	}
 
-	stmt.Args = p.parseExpressionList(ast.TOKEN_RPAREN)
+	args := []ast.Expression{}
+	if !p.check(ast.TOKEN_RPAREN) {
+		for {
+			args = append(args, p.ParseExpression())
 
-	return stmt
+			if !p.match(ast.TOKEN_COMMA) {
+				break
+			}
+		}
+	}
+
+	if p.consume(ast.TOKEN_RPAREN, "expected ')' after arguments").Tag == ast.TOKEN_INVALID {
+		return nil
+	}
+
+	return &ast.SayStmt{Token: token, Args: args}
 }
 
 func (p *Parser) parseBlock() *ast.Block {
-	block := &ast.Block{Token: p.previous()}
+	token := p.previous()
+	stmts := []ast.Statement{}
 
 	for !p.check(ast.TOKEN_RBRACE) && !p.isAtEnd() {
 		if stmt := p.parseStatement(); stmt != nil {
-			block.Statements = append(block.Statements, stmt)
+			stmts = append(stmts, stmt)
 		}
 	}
 
@@ -118,69 +132,80 @@ func (p *Parser) parseBlock() *ast.Block {
 		return nil
 	}
 
-	return block
+	return &ast.Block{Token: token, Statements: stmts}
 }
 
 func (p *Parser) parseIf() ast.Statement {
-  stmt := &ast.IfStmt{Token: p.previous()}
-
-  stmt.Condition = p.ParseExpression(PREC_NONE)
+	token := p.previous()
+	cond := p.ParseExpression()
 
   if p.consume(ast.TOKEN_LBRACE, "expected '{' after if condition").Tag == ast.TOKEN_INVALID {
 		return nil
 	}
 
-  stmt.Consequence = p.parseBlock()
+	cons := p.parseBlock()
 
+	var alt ast.Statement
   if p.match(ast.TOKEN_KW_ELSE) {
     if p.match(ast.TOKEN_KW_IF) {
-      stmt.Alternative = p.parseIf()
+    	alt = p.parseIf()
     } else {
    		if p.consume(ast.TOKEN_LBRACE, "expected '{' after 'else'").Tag == ast.TOKEN_INVALID {
 				return nil
 			}
 
-      stmt.Alternative = p.parseBlock()
+      alt = p.parseBlock()
     }
   }
 
-  return stmt
+  return &ast.IfStmt{
+		Token: token,
+		Condition: cond,
+		Consequence: cons,
+		Alternative: alt,
+	}
 }
 
 func (p *Parser) parseFor() *ast.ForStmt {
-	stmt := &ast.ForStmt{Token: p.previous()}
+	token := p.previous()
 
-	iterToken := p.consume(ast.TOKEN_IDENTIFIER, "expected iterator variable name")
-	if iterToken.Tag == ast.TOKEN_INVALID {
+	iter := p.consume(ast.TOKEN_IDENTIFIER, "expected iterator variable name")
+	if iter.Tag == ast.TOKEN_INVALID {
 		return nil
 	}
-	stmt.Iterator = iterToken.Slice
 
 	if p.consume(ast.TOKEN_KW_IN, "expected 'in' after iterator variable").Tag == ast.TOKEN_INVALID {
 		return nil
 	}
 
-	stmt.Start = p.ParseExpression(PREC_ASSIGNMENT)
+	start := p.ParseExpression()
 
 	if p.consume(ast.TOKEN_RANGE, "expected '..' after start value").Tag == ast.TOKEN_INVALID {
 		return nil
 	}
 
-	stmt.End = p.ParseExpression(PREC_ASSIGNMENT)
+	end := p.ParseExpression()
 
 	if p.consume(ast.TOKEN_LBRACE, "expected '{' after for loop range").Tag == ast.TOKEN_INVALID {
 		return nil
 	}
 
-	stmt.Body = p.parseBlock()
+	body := p.parseBlock()
 
-	return stmt
+	return &ast.ForStmt{
+		Token: token,
+		Iterator: iter.Slice,
+		Start: start,
+		End: end,
+		Body: body,
+	}
 }
 
 func (p *Parser) parseReturn() ast.Statement {
-	stmt := &ast.ReturnStmt{Token: p.previous()}
-	stmt.ReturnValue = p.ParseExpression(PREC_NONE)
-	return stmt
+	return &ast.ReturnStmt{
+		Token: p.previous(),
+		ReturnValue: p.ParseExpression(),
+	}
 }
 
 func (p *Parser) parseBreak() ast.Statement {
