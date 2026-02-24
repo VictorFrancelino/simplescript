@@ -47,6 +47,7 @@ const (
 	TypeFloat
 	TypeStr
 	TypeBool
+	TypeList
 )
 
 func (d DataType) String() string {
@@ -118,6 +119,8 @@ func (c *Compiler) ResolveType(typeName string) DataType {
 		return TypeFloat
 	case "bool":
 		return TypeBool
+	case "list":
+		return TypeList
 	default:
 		return TypeStr
 	}
@@ -134,6 +137,8 @@ func (c *Compiler) GetGoType(dtype DataType) string {
 		return "bool"
 	case TypeStr:
 		return "string"
+	case TypeList:
+		return "[]interface{}"
 	default:
 		return "interface{}"
 	}

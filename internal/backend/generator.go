@@ -121,6 +121,14 @@ func (g *Generator) genExpression(expr ast.Expression) jen.Code {
 	case *ast.FloatLiteral: return jen.Lit(e.Value)
 	case *ast.StringLiteral: return jen.Lit(e.Value)
 	case *ast.BooleanLiteral: return jen.Lit(e.Value)
+	case *ast.ListLiteral:
+		elements := []jen.Code{}
+
+		for _, el := range e.Elements {
+			elements = append(elements, g.genExpression(el))
+		}
+
+		return jen.Index().Interface().Values(elements...)
 	case *ast.Identifier: return jen.Id(e.Value)
 	case *ast.PrefixExpression: return jen.Op(e.Operator).Add(g.genExpression(e.Right))
 	case *ast.InfixExpression: return jen.Parens(jen.Add(g.genExpression(e.Left)).Op(e.Operator).Add(g.genExpression(e.Right)))

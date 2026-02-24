@@ -16,6 +16,11 @@ func (a *Analyzer) analyzeExpression(expr ast.Expression) string {
 		return "str"
 	case *ast.BooleanLiteral:
 		return "bool"
+	case *ast.ListLiteral:
+		for _, element := range e.Elements {
+			a.analyzeExpression(element)
+		}
+		return "list"
 	case *ast.Identifier:
 		if dataType, exists := a.env.Resolve(e.Value); exists {
 			return dataType

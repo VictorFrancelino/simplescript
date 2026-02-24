@@ -83,6 +83,20 @@ func (p *Parser) parsePrimary() ast.Expression {
 		return &ast.BooleanLiteral{Token: token, Value: true}
 	case ast.TOKEN_KW_FALSE:
 		return &ast.BooleanLiteral{Token: token, Value: false}
+	case ast.TOKEN_LBRACKET:
+		elements := []ast.Expression{}
+
+		if !p.check(ast.TOKEN_RBRACKET) {
+			for {
+				elements = append(elements, p.ParseExpression())
+
+				if !p.match(ast.TOKEN_COMMA) { break }
+			}
+		}
+
+		p.consume(ast.TOKEN_RBRACKET, "expected ']' after list elements")
+
+		return &ast.ListLiteral{Token: token, Elements: elements}
 	case ast.TOKEN_IDENTIFIER:
 		return &ast.Identifier{Token: token, Value: token.Slice}
 	case ast.TOKEN_LPAREN:

@@ -133,6 +133,7 @@ type IntegerLiteral struct{ Token Token; Value int64 }
 type FloatLiteral struct{ Token Token; Value float64 }
 type StringLiteral struct{ Token Token; Value string }
 type BooleanLiteral struct{ Token Token; Value bool }
+type ListLiteral struct{ Token Token; Elements []Expression }
 type Identifier struct{ Token Token; Value string }
 
 func (il *IntegerLiteral) expressionNode() {}
@@ -146,6 +147,9 @@ func (sl *StringLiteral) String() string { return "" }
 
 func (bl *BooleanLiteral) expressionNode() {}
 func (bl *BooleanLiteral) String() string { return "" }
+
+func (il *ListLiteral) expressionNode() {}
+func (il *ListLiteral) String() string { return "" }
 
 func (i *Identifier) expressionNode() {}
 func (i *Identifier) String() string { return "" }
