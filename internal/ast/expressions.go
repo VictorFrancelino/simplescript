@@ -48,3 +48,10 @@ type PrefixExpression struct {
 	Operator string
 	Right Expression
 }
+
+type IndexExpression struct {
+	baseExpr
+	Token Token
+	Left Expression
+	Index Expression
+}

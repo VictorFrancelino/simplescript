@@ -19,7 +19,21 @@ func (p *Parser) parseStatement() ast.Statement {
 			return p.parseSay()
 		}
 
-		return p.parseAssignment(token.Slice)
+		var target ast.Expression = &ast.Identifier{Token: token, Value: token.Slice}
+
+		for p.match(ast.TOKEN_LBRACKET) {
+			bracketToken := p.previous()
+			indexExpr := p.ParseExpression()
+			p.consume(ast.TOKEN_RBRACKET, "expected ']' after index")
+
+			target = &ast.IndexExpression{
+				Token: bracketToken,
+				Left: target,
+				Index: indexExpr,
+			}
+		}
+
+		return p.parseAssignment(target)
 	default:
 		p.addError("unexpected token in statement")
 		return nil
@@ -59,18 +73,19 @@ func (p *Parser) parseVarDecl(isConst bool) ast.Statement {
 	}
 }
 
-func (p *Parser) parseAssignment(firstName string) ast.Statement {
+func (p *Parser) parseAssignment(firstTarget ast.Expression) ast.Statement {
 	token := p.previous()
-	targets := []string{firstName}
+	targets := []ast.Expression{firstTarget}
 
   for p.match(ast.TOKEN_COMMA) {
-  	target := p.consume(ast.TOKEN_IDENTIFIER, "expected variable name after ','")
+  	target := p.parseIndex()
 
-  	if target.Tag == ast.TOKEN_INVALID {
+  	if target == nil {
+   		p.addError("expected variable or list index after ','")
    		return nil
    	}
 
-   	targets = append(targets, target.Slice)
+   	targets = append(targets, target)
   }
 
   var operator string

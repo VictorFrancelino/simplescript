@@ -38,9 +38,23 @@ func (a *Analyzer) analyzeVarDecl(node *ast.VarDecl) {
 
 func (a *Analyzer) analyzeAssignment(node *ast.Assignment) {
 	for _, target := range node.Targets {
-		_, exists := a.env.Resolve(target)
-		if !exists {
-			a.reportError(node.Token, "undefined variable '%s'", target)
+		var varName string
+
+		switch t := target.(type) {
+		case *ast.Identifier: varName = t.Value
+		case *ast.IndexExpression:
+			if id, ok := t.Left.(*ast.Identifier); ok {
+				varName = id.Value
+			}
+
+			a.analyzeExpression(t.Index)
+		}
+
+		if varName != "" {
+			_, exists := a.env.Resolve(varName)
+			if !exists {
+				a.reportError(node.Token, "undefined variable '%s'", varName)
+			}
 		}
 	}
 

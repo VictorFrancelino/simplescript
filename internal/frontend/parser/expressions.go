@@ -60,7 +60,29 @@ func (p *Parser) parseUnary() ast.Expression {
 		right := p.parseUnary()
 		return &ast.PrefixExpression{Operator: operator.Slice, Right: right}
 	}
-	return p.parsePrimary()
+	return p.parseIndex()
+}
+
+func (p *Parser) parseIndex() ast.Expression {
+	expr := p.parsePrimary()
+
+	for {
+		if p.match(ast.TOKEN_LBRACKET) {
+			bracketToken := p.previous()
+			indexExpr := p.ParseExpression()
+			p.consume(ast.TOKEN_RBRACKET, "expected ']' after index")
+
+			expr = &ast.IndexExpression{
+				Token: bracketToken,
+				Left: expr,
+				Index: indexExpr,
+			}
+		} else {
+			break
+		}
+	}
+
+	return expr
 }
 
 func (p *Parser) parsePrimary() ast.Expression {

@@ -62,7 +62,7 @@ func (g *Generator) genStatement(group *jen.Group, stmt ast.Statement) {
 	case *ast.Assignment:
 		target := s.Targets[0]
 		val := g.genExpression(s.Values[0])
-		group.Add(jen.Id(target).Op(s.Operator).Add(val))
+		group.Add(g.genExpression(target)).Op(s.Operator).Add(val)
 
 	case *ast.SayStmt:
 		args := []jen.Code{}
@@ -132,6 +132,7 @@ func (g *Generator) genExpression(expr ast.Expression) jen.Code {
 	case *ast.Identifier: return jen.Id(e.Value)
 	case *ast.PrefixExpression: return jen.Op(e.Operator).Add(g.genExpression(e.Right))
 	case *ast.InfixExpression: return jen.Parens(jen.Add(g.genExpression(e.Left)).Op(e.Operator).Add(g.genExpression(e.Right)))
+	case *ast.IndexExpression: return jen.Add(g.genExpression(e.Left)).Index(g.genExpression(e.Index))
 	default: return jen.Null()
 	}
 }

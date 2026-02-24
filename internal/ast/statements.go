@@ -12,7 +12,7 @@ type VarDecl struct {
 type Assignment struct {
 	baseStmt
 	Token Token
-	Targets []string
+	Targets []Expression
 	Operator string
 	Values []Expression
 }
