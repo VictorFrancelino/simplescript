@@ -47,7 +47,7 @@ func (g *Generator) genStatement(group *jen.Group, stmt ast.Statement) {
 	case *ast.VarDecl:
 		goType := "interface{}"
 		if info, ok := g.compiler.LookupVariable(s.Name); ok {
-			goType = g.compiler.GetGoType(info.DataType)
+			goType = g.compiler.GetGoType(info.Type)
 		}
 
 		var stmtBuilder *jen.Statement

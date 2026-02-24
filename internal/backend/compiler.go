@@ -27,41 +27,20 @@ const (
 )
 
 func (e ErrorCode) String() string {
-	names := [...]string{
-		"SyntaxError",
-		"TypeError",
-		"NameError",
-		"LinkerError",
-		"InternalError",
+	switch e {
+	case SyntaxError: return "SyntaxError"
+	case TypeError: return "TypeError"
+	case NameError: return "NameError"
+	case LinkerError: return "LinkerError"
+	case InternalError: return "InternalError"
+	default: return "UnknownError"
 	}
-	if e < 0 || int(e) >= len(names) {
-		return "UnknownError"
-	}
-	return names[e]
-}
-
-type DataType int
-
-const (
-	TypeInt DataType = iota
-	TypeFloat
-	TypeStr
-	TypeBool
-	TypeList
-)
-
-func (d DataType) String() string {
-	names := [...]string{"int", "float", "str", "bool"}
-	if d < 0 || int(d) >= len(names) {
-		return "unknown"
-	}
-	return names[d]
 }
 
 type Variable struct {
 	Name string
 	IsConst bool
-	DataType DataType
+	Type string
 }
 
 type Compiler struct {
@@ -94,7 +73,7 @@ func (c *Compiler) processStatement(stmt ast.Statement) {
 		c.Locals[s.Name] = Variable{
 			Name: s.Name,
 			IsConst: s.IsConst,
-			DataType: c.ResolveType(s.DataType),
+			Type: s.DataType,
 		}
 	case *ast.Block:
 		for _, bStmt := range s.Statements {
@@ -110,37 +89,15 @@ func (c *Compiler) processStatement(stmt ast.Statement) {
 	}
 }
 
-// Converts an AST type string into a Compiler DataType
-func (c *Compiler) ResolveType(typeName string) DataType {
-	switch typeName {
-	case "int":
-		return TypeInt
-	case "float":
-		return TypeFloat
-	case "bool":
-		return TypeBool
-	case "list":
-		return TypeList
-	default:
-		return TypeStr
-	}
-}
-
 // Maps SimpleScript types to Go native types for generation
-func (c *Compiler) GetGoType(dtype DataType) string {
-	switch dtype {
-	case TypeInt:
-		return "int"
-	case TypeFloat:
-		return "float64"
-	case TypeBool:
-		return "bool"
-	case TypeStr:
-		return "string"
-	case TypeList:
-		return "[]interface{}"
-	default:
-		return "interface{}"
+func (c *Compiler) GetGoType(ssType string) string {
+	switch ssType {
+	case "int": return "int"
+	case "float": return "float64"
+	case "bool": return "bool"
+	case "str": return "string"
+	case "list": return "[]interface{}"
+	default: return "interface{}"
 	}
 }
 
@@ -154,17 +111,11 @@ func (c *Compiler) HasVariable(name string) bool {
 	return ok
 }
 
-func (c *Compiler) EnterScope() {
-	c.ScopeLevel++
-}
+func (c *Compiler) EnterScope() { c.ScopeLevel++ }
 
-func (c *Compiler) ExitScope() {
-	c.ScopeLevel--
-}
+func (c *Compiler) ExitScope() { c.ScopeLevel-- }
 
-func (c *Compiler) Dispose() {
-	c.Locals = nil
-}
+func (c *Compiler) Dispose() { c.Locals = nil }
 
 // Prints formatted diagnostic messages to the standard error output
 func (c *Compiler) Report(
