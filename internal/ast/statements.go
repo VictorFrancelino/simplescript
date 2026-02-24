@@ -13,6 +13,7 @@ type Assignment struct {
 	baseStmt
 	Token Token
 	Targets []string
+	Operator string
 	Values []Expression
 }
 

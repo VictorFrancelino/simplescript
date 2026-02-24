@@ -84,12 +84,32 @@ func (l *Lexer) scanToken() ast.Token {
 	case '}': return l.newToken(ast.TOKEN_RBRACE, "}", startLine, startCol)
 	case '[': return l.newToken(ast.TOKEN_LBRACKET, "[", startLine, startCol)
 	case ']': return l.newToken(ast.TOKEN_RBRACKET, "]", startLine, startCol)
-	case '+': return l.newToken(ast.TOKEN_PLUS, "+", startLine, startCol)
-	case '-': return l.newToken(ast.TOKEN_MINUS, "-", startLine, startCol)
-	case '*': return l.newToken(ast.TOKEN_ASTERISK, "*", startLine, startCol)
+	case '+':
+		if l.match('=') {
+			return l.newToken(ast.TOKEN_PLUS_EQUAL, "+=", startLine, startCol)
+		}
+
+		return l.newToken(ast.TOKEN_PLUS, "+", startLine, startCol)
+	case '-':
+		if l.match('=') {
+			return l.newToken(ast.TOKEN_MINUS_EQUAL, "-=", startLine, startCol)
+		}
+
+		return l.newToken(ast.TOKEN_MINUS, "-", startLine, startCol)
+	case '*':
+		if l.match('=') {
+			return l.newToken(ast.TOKEN_ASTERISK_EQUAL, "*=", startLine, startCol)
+		}
+
+		return l.newToken(ast.TOKEN_ASTERISK, "*", startLine, startCol)
 	case ':': return l.newToken(ast.TOKEN_COLON, ":", startLine, startCol)
 	case ',': return l.newToken(ast.TOKEN_COMMA, ",", startLine, startCol)
-	case '/': return l.newToken(ast.TOKEN_SLASH, "/", startLine, startCol)
+	case '/':
+		if l.match('=') {
+			return l.newToken(ast.TOKEN_SLASH_EQUAL, "/=", startLine, startCol)
+		}
+
+		return l.newToken(ast.TOKEN_SLASH, "/", startLine, startCol)
 	case '=':
 		if l.match('=') {
 			return l.newToken(ast.TOKEN_EQUAL_EQUAL, "==", startLine, startCol)

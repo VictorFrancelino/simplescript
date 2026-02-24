@@ -62,7 +62,7 @@ func (g *Generator) genStatement(group *jen.Group, stmt ast.Statement) {
 	case *ast.Assignment:
 		target := s.Targets[0]
 		val := g.genExpression(s.Values[0])
-		group.Add(jen.Id(target).Op("=").Add(val))
+		group.Add(jen.Id(target).Op(s.Operator).Add(val))
 
 	case *ast.SayStmt:
 		args := []jen.Code{}

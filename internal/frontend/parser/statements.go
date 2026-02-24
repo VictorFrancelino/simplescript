@@ -73,9 +73,19 @@ func (p *Parser) parseAssignment(firstName string) ast.Statement {
    	targets = append(targets, target.Slice)
   }
 
-  if p.consume(ast.TOKEN_EQUALS, "expected '=' in assignment").Tag == ast.TOKEN_INVALID {
-		return nil
-	}
+  var operator string
+
+  if p.match(ast.TOKEN_EQUALS, ast.TOKEN_PLUS_EQUAL, ast.TOKEN_MINUS_EQUAL, ast.TOKEN_ASTERISK_EQUAL, ast.TOKEN_SLASH_EQUAL) {
+  	operator = p.previous().Slice
+  } else {
+  	p.addError("expected assignment operator (=, +=, -=, *=, /=)")
+   	return nil
+  }
+
+  if operator != "=" && (len(targets) > 1) {
+  	p.addError("augmented assignment (" + operator + ") can only have one target")
+  	return nil
+  }
 
 	values := []ast.Expression{}
   for {
@@ -89,6 +99,7 @@ func (p *Parser) parseAssignment(firstName string) ast.Statement {
   return &ast.Assignment{
 		Token: token,
 		Targets: targets,
+		Operator: operator,
 		Values: values,
 	}
 }
